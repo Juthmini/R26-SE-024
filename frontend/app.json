@@ -59,7 +59,9 @@
           "isAndroidBackgroundLocationEnabled": true
         }
       ],
-      "expo-background-task"
+      "expo-background-task",
+      "expo-video",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, Alert } from 'react-native';
-import { Audio } from 'expo-av';
+import { AudioPlayer, createAudioPlayer } from 'expo-audio';
 import { Ionicons } from '@expo/vector-icons';
 import { Question } from '@/src/types/assessment.types';
 
@@ -13,27 +13,24 @@ export function PhraseRepeatRenderer({ question, onAnswer }: Props) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasListened, setHasListened] = useState(false);
   const [userResponse, setUserResponse] = useState<'correct' | 'incorrect' | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const soundRef = useRef<AudioPlayer | null>(null);
 
   const playAudio = async () => {
     try {
       setIsPlaying(true);
-      
+
       // Create audio from text-to-speech or pre-recorded audio
-      const { sound } = await Audio.Sound.createAsync(
-        require('@/assets/audio/patient-assessment.mp3'), 
-        { shouldPlay: true }
-      );
-      
+      const sound = createAudioPlayer(require('@/assets/audio/patient-assessment.mp3'));
       soundRef.current = sound;
-      await sound.playAsync();
-      
-      sound.setOnPlaybackStatusUpdate((status) => {
+
+      sound.addListener('playbackStatusUpdate', (status) => {
         if (status.isLoaded && status.didJustFinish) {
           setIsPlaying(false);
           setHasListened(true);
         }
       });
+
+      sound.play();
     } catch (error) {
       console.error('Error playing audio:', error);
       Alert.alert('Error', 'Failed to play audio');

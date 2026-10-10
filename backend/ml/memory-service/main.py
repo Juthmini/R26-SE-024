@@ -81,6 +81,10 @@ if not os.path.exists("uploads"):
     os.makedirs("uploads")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
+if not os.path.exists("videos"):
+    os.makedirs("videos")
+app.mount("/videos", StaticFiles(directory="videos"), name="videos")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -149,6 +153,18 @@ PATIENTS_DB = {}
 ROUTINES_DB = {}
 GEOFENCE_DB = {} # Format: {"PAT-2026-003": {"lat": 6.89, "lng": 79.85, "threshold": 50}}
 
+# --- Memory Scrapbook / Daily Diary Globals ---
+# Raw history logs (every ping/event, unfiltered) - the diary generator reads
+# these and scores/filters them down; nothing here is shown to the patient
+# directly.
+LOCATION_HISTORY = {}  # {"PAT-...": [{"lat":, "lng":, "time": iso string}, ...]}
+BEHAVIOR_HISTORY = {}  # {"PAT-...": [{"activity":, "time_of_day":, "is_anomaly":, "message":, "time": iso string}, ...]}
+# Unified diary-candidate event log. Every event here already has a photo or
+# a concrete patient interaction attached, so these are what the event-scoring
+# step actually ranks (location/behavior history above is the noisy raw feed;
+# this is the pre-filtered "interesting things happened" feed).
+DIARY_EVENTS = {}      # {"PAT-...": [{"event":, "detail":, "photo_url":, "time": iso string, "channel": "diary"|"caregiver_alert"}, ...]}
+
 import json
 import os
 
@@ -157,6 +173,7 @@ GLOBAL_OWNERSHIP = {} # Maps "bottle" -> {"owner_id": "PAT-2026-001", "custom_na
 
 def load_db():
     global MEMORY_VAULT, OBJECT_FREQUENCIES, TRAINED_OBJECTS, ACTIVE_CAMERAS, GLOBAL_OWNERSHIP, PATIENTS_DB, ROUTINES_DB, GEOFENCE_DB
+    global LOCATION_HISTORY, BEHAVIOR_HISTORY, DIARY_EVENTS
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r") as f:
@@ -169,6 +186,9 @@ def load_db():
                 PATIENTS_DB = data.get("PATIENTS_DB", {})
                 ROUTINES_DB = data.get("ROUTINES_DB", {})
                 GEOFENCE_DB = data.get("GEOFENCE_DB", {})
+                LOCATION_HISTORY = data.get("LOCATION_HISTORY", {})
+                BEHAVIOR_HISTORY = data.get("BEHAVIOR_HISTORY", {})
+                DIARY_EVENTS = data.get("DIARY_EVENTS", {})
         except Exception as e:
             print("Could not load DB:", e)
 
@@ -182,10 +202,29 @@ def save_db():
             "GLOBAL_OWNERSHIP": GLOBAL_OWNERSHIP,
             "PATIENTS_DB": PATIENTS_DB,
             "ROUTINES_DB": ROUTINES_DB,
-            "GEOFENCE_DB": GEOFENCE_DB
+            "GEOFENCE_DB": GEOFENCE_DB,
+            "LOCATION_HISTORY": LOCATION_HISTORY,
+            "BEHAVIOR_HISTORY": BEHAVIOR_HISTORY,
+            "DIARY_EVENTS": DIARY_EVENTS
         }, f)
 
 load_db()
+
+def log_diary_event(patient_id, event, detail="", photo_url="", channel="diary"):
+    """Append one candidate event for the daily diary (or a caregiver-only
+    alert, via channel="caregiver_alert"). Called from wherever something
+    diary-worthy happens - object found, anomaly detected, etc. - instead of
+    patient activity being logged only as a side-effect of other endpoints.
+    """
+    if patient_id not in DIARY_EVENTS:
+        DIARY_EVENTS[patient_id] = []
+    DIARY_EVENTS[patient_id].append({
+        "event": event,
+        "detail": detail,
+        "photo_url": photo_url,
+        "time": datetime.datetime.now().isoformat(),
+        "channel": channel,
+    })
 
 # Context-Aware AI: Misplaced Object Logic loaded from CSV
 EXPECTED_LOCATIONS = {}
@@ -272,11 +311,23 @@ class LocationUpdate(BaseModel):
 @app.post("/update-location")
 async def update_location(req: LocationUpdate):
     import datetime
+    now = datetime.datetime.now().isoformat()
     PATIENT_LOCATIONS[req.patient_id] = {
-        "lat": req.lat, 
-        "lng": req.lng, 
-        "last_updated": datetime.datetime.now().isoformat()
+        "lat": req.lat,
+        "lng": req.lng,
+        "last_updated": now
     }
+
+    # Keep the raw ping history too (PATIENT_LOCATIONS above is overwritten
+    # every call and only ever holds "right now" - the diary generator needs
+    # the whole day's pings to find where the patient actually stopped).
+    if req.patient_id not in LOCATION_HISTORY:
+        LOCATION_HISTORY[req.patient_id] = []
+    LOCATION_HISTORY[req.patient_id].append({"lat": req.lat, "lng": req.lng, "time": now})
+    # Cap history so this stays memory/disk-safe on a long-running patient.
+    LOCATION_HISTORY[req.patient_id] = LOCATION_HISTORY[req.patient_id][-2000:]
+    save_db()
+
     return {"status": "success"}
 
 import math
@@ -673,64 +724,21 @@ async def analyze_behavior(logs: list[BehaviorLog]):
     return {"status": "success", "patterns": patterns, "anomalies": []}
 
 
-# ─── Predict Behavior (Anomaly Detection Demo) ──────────────────────
-class PredictBehaviorRequest(BaseModel):
-    age: int = 75
-    condition: str = "Alzheimer's"
-    physical_state: str = "Mobile"
-    time_of_day: str
-    activity: str
-    duration_mins: int
-
-@app.post("/predict-behavior")
-async def predict_behavior(req: PredictBehaviorRequest):
-    is_anomaly = False
-    message = "Normal behavior"
-    
-    if req.activity.lower() == "wandering":
-        is_anomaly = True
-        message = "High Risk: Night time wandering detected." if req.time_of_day.lower() == "night" else "Warning: Wandering behavior detected."
-        
-    return {
-        "status": "success",
-        "is_anomaly": is_anomaly,
-        "message": message
-    }
+# NOTE: a second, duplicate "/predict-behavior" route used to be defined here
+# - a placeholder that just string-matched activity == "wandering". FastAPI
+# only ever matches the FIRST registered route for a given path, so that
+# placeholder silently shadowed the REAL trained Isolation Forest model
+# defined further below in this file, which has been dead code ever since.
+# Removed here so the real model is the only "/predict-behavior" handler.
 
 
 # ─── Free Local Face Recognition (100% Offline / PyTorch / No API Keys) ───────
-@app.post("/extract-embedding")
-async def extract_embedding(file: UploadFile = File(...)):
-    if not FACENET_AVAILABLE:
-        return {"status": "error", "message": "Facenet PyTorch is not available"}
-    
-    temp_path = f"temp_face_{file.filename or 'face.jpg'}"
-    with open(temp_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    try:
-        img = Image.open(temp_path).convert('RGB')
-        # MTCNN detects face and returns cropped 160x160 tensor
-        face = mtcnn(img)
-        if face is None:
-            # Robust fallback: if MTCNN missed bounding box (e.g. dim lighting),
-            # center crop and resize to 160x160 so extraction still succeeds!
-            tf = transforms.Compose([
-                transforms.Resize((160, 160)),
-                transforms.ToTensor(),
-                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
-            ])
-            face = tf(img)
-        
-        # InceptionResnetV1 generates 512-dim embedding vector
-        with torch.no_grad():
-            embedding = face_resnet(face.unsqueeze(0)).detach().cpu().numpy()[0].tolist()
-
-        return {"status": "success", "embedding": embedding}
-    except Exception as e:
-        return {"status": "error", "message": f"Face extraction failed: {str(e)}"}
-    finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+# NOTE: dedicated face-embedding logic now lives inside the unified /extract-embedding
+# handler below (type="person"). A second, duplicate "/extract-embedding" route used to be
+# defined further down in this file; FastAPI only ever matches the FIRST registered route
+# for a given path, so the old duplicate silently swallowed every object-embedding request
+# (personalObjectRoutes.js's `?type=object` calls) and ran face detection on them instead.
+# Removed here so the real type-aware handler (further below) is the only one registered.
 
 
 @app.post("/match-face")
@@ -778,7 +786,7 @@ async def match_face(req: MatchRequest):
 
 
 @app.post("/extract-embedding")
-async def extract_embedding(type: str = "object", file: UploadFile = File(...)):
+async def extract_embedding(type: str = "person", file: UploadFile = File(...)):
     temp_path = f"emb_temp_{file.filename or 'scan.jpg'}"
     with open(temp_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -827,6 +835,367 @@ async def recognize_custom(req: MatchCustomRequest):
         return {"success": True, "match": best_match["name"], "type": best_match.get("type", "object"), "similarity": float(highest_sim)}
     
     return {"success": False, "message": "No strong match found", "similarity": float(highest_sim)}
+
+
+# ─── Find My Things: open-vocabulary localization + personal-instance match ───
+# Stage A (category): YOLO-World finds *where* an object of the requested category
+# (e.g. "glasses") is in the live frame - unlike the COCO-only `model` above, it is
+# not limited to 80 fixed classes, so it works for dementia-relevant items that were
+# never in COCO (glasses, wallet, pill box, hearing aid case, keys).
+# Stage B (instance): the matched region is cropped and compared via MobileNet
+# embedding (extract_object_embedding) against the embeddings captured at this
+# patient's registration, so the app confirms it is THIS patient's own item, not
+# just any object of that category.
+_yolo_world_model = None
+
+def get_yolo_world():
+    global _yolo_world_model
+    if _yolo_world_model is None:
+        _yolo_world_model = YOLO('yolov8s-worldv2.pt')
+    return _yolo_world_model
+
+# NOTE: MobileNet-embedding cosine similarity for this match step has not yet been
+# calibrated against real registered-item photos. 0.55 is a starting guess (lower
+# than the 0.65 used for Facenet face matches, since MobileNet ImageNet features are
+# less discriminative for arbitrary objects) - tune this once real test photos exist.
+ITEM_MATCH_THRESHOLD = 0.55
+YOLO_WORLD_CONF = 0.15  # open-vocab confidence is naturally lower/spread than closed-set COCO
+
+@app.post("/scan-for-item")
+async def scan_for_item(
+    file: UploadFile = File(...),
+    item_name: str = Form(...),
+    known_items: str = Form(...),  # JSON string: [{"id": "...", "embedding": [...]}, ...]
+    patient_id: str = Form("PAT-2026-001"),
+):
+    temp_path = f"scan_temp_{file.filename or 'frame.jpg'}"
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    try:
+        try:
+            items = json.loads(known_items) if known_items else []
+        except Exception:
+            items = []
+
+        if not items:
+            return {"status": "error", "message": "No registered reference photo for this item yet"}
+
+        yw = get_yolo_world()
+        yw.set_classes([item_name])
+        results = yw.predict(temp_path, conf=YOLO_WORLD_CONF, verbose=False)
+
+        img = Image.open(temp_path).convert('RGB')
+        img_w, img_h = img.size
+
+        candidates = []
+        for r in results:
+            for box in r.boxes:
+                candidates.append({
+                    "conf": float(box.conf[0]),
+                    "bbox": box.xyxy[0].tolist(),
+                })
+
+        if not candidates:
+            return {"status": "success", "found": False, "message": f"No {item_name}-like object visible in this frame"}
+
+        candidates.sort(key=lambda c: c["conf"], reverse=True)
+
+        best = None
+        for cand in candidates[:3]:
+            x1, y1, x2, y2 = cand["bbox"]
+            crop = img.crop((max(0, x1), max(0, y1), min(img_w, x2), min(img_h, y2)))
+            crop_path = f"crop_{temp_path}"
+            crop.save(crop_path)
+            try:
+                crop_emb = extract_object_embedding(crop_path)
+            finally:
+                if os.path.exists(crop_path):
+                    os.remove(crop_path)
+
+            crop_vec = np.array(crop_emb).reshape(1, -1)
+            for item in items:
+                emb = item.get("embedding")
+                if not emb:
+                    continue
+                known_vec = np.array(emb).reshape(1, -1)
+                sim = float(cosine_similarity(crop_vec, known_vec)[0][0])
+                if best is None or sim > best["similarity"]:
+                    best = {"similarity": sim, "item_id": item.get("id"), "bbox": cand["bbox"]}
+
+        if best and best["similarity"] >= ITEM_MATCH_THRESHOLD:
+            x1, y1, x2, y2 = best["bbox"]
+            cx = (x1 + x2) / 2
+            direction = "left" if cx < img_w / 3 else "right" if cx > img_w * 2 / 3 else "center"
+
+            # The frame that found the item IS the photo - no separate
+            # capture step needed. Save it (same Cloudinary pattern as
+            # /detect-objects) and log it as a diary-candidate event, so
+            # "found my glasses" shows up in the evening diary for free.
+            photo_url = ""
+            try:
+                upload_res = cloudinary.uploader.upload(temp_path, folder="memocare_vault")
+                photo_url = upload_res.get("secure_url", "")
+            except Exception as e:
+                print("Cloudinary upload failed for found-item photo:", e)
+
+            log_diary_event(
+                patient_id,
+                "object_found",
+                detail=f"Found {item_name} ({round(best['similarity'] * 100, 1)}% match)",
+                photo_url=photo_url,
+                channel="diary",
+            )
+            save_db()
+
+            return {
+                "status": "success",
+                "found": True,
+                "item_id": best["item_id"],
+                "confidence": round(best["similarity"] * 100, 1),
+                "bbox_xyxy": [round(v, 1) for v in best["bbox"]],
+                "direction": direction,
+                "frame_width": img_w,
+                "frame_height": img_h,
+                "photo_url": photo_url,
+            }
+
+        return {
+            "status": "success",
+            "found": False,
+            "message": f"Saw something that might be {item_name}-shaped, but it didn't match closely enough",
+            "best_similarity": round(best["similarity"] * 100, 1) if best else 0,
+        }
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+# ─── Memory Scrapbook: Event Scoring + Daily Diary Generation ─────────
+# GROQ_API_KEY must be set as a real environment variable before starting
+# this service (e.g. `$env:GROQ_API_KEY="..."` in PowerShell) - it is NOT
+# read from backend/.env (that file is only loaded by the Node process).
+# Without it, the diary still works but falls back to plain concatenated
+# event text instead of an LLM-written paragraph.
+import requests as _requests
+
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+
+def score_diary_events(patient_id: str, target_date: str = None):
+    """Collect today's (or `target_date`'s, ISO yyyy-mm-dd) diary-candidate
+    events for a patient and rank them by diary-worthiness. Returns a list of
+    {summary, photo_url, time, score}, highest score first. This is the
+    research-contribution part: the LLM never sees raw, unfiltered logs - it
+    only sees whatever this function decided was worth telling the family.
+    """
+    import datetime as _dt
+    target_date = target_date or _dt.date.today().isoformat()
+
+    candidates = []
+
+    # DIARY_EVENTS: only the "diary" channel - caregiver_alert events
+    # (e.g. anomaly_detected) are intentionally excluded from the diary text.
+    for ev in DIARY_EVENTS.get(patient_id, []):
+        if ev.get("channel") != "diary":
+            continue
+        if not ev.get("time", "").startswith(target_date):
+            continue
+        score = 2  # base: a concrete, named event
+        if ev.get("photo_url"):
+            score += 2
+        candidates.append({
+            "summary": f"{ev['event'].replace('_', ' ')}: {ev.get('detail', '')}".strip(": "),
+            "photo_url": ev.get("photo_url", ""),
+            "time": ev["time"],
+            "score": score,
+        })
+
+    # MEMORY_VAULT: objects seen/photographed. NOTE: vault entries store time
+    # as "%I:%M %p" only (no date), so these can't be precisely filtered to
+    # `target_date` yet - they're included as general context until vault
+    # entries also carry a full ISO timestamp.
+    for item in MEMORY_VAULT.get(patient_id, []):
+        score = 1
+        if item.get("image_url") and "placeholder" not in item.get("image_url", ""):
+            score += 2
+        if item.get("is_favorite"):
+            score += 1
+        candidates.append({
+            "summary": f"Saw {item.get('object')} in {item.get('location', 'the house')}",
+            "photo_url": item.get("image_url", ""),
+            "time": item.get("time", ""),
+            "score": score,
+        })
+
+    candidates.sort(key=lambda c: c["score"], reverse=True)
+    return candidates
+
+
+def build_diary_text(top_events):
+    """Shared by /generate-diary and /generate-diary-video. Returns (diary_text, note)."""
+    plain_fallback = " ".join(f"{e['summary']}." for e in top_events)
+
+    if not GROQ_API_KEY:
+        return plain_fallback, "GROQ_API_KEY not set - showing raw events instead of an LLM-written story."
+
+    event_lines = "\n".join(f"- {e['summary']} (around {e['time']})" for e in top_events)
+    prompt = (
+        "Write a short, warm diary paragraph (3-5 sentences) for a dementia patient's family, "
+        "summarizing ONLY these real events from today. Do not invent any detail not listed below. "
+        "Use simple, gentle, second-person language (\"You...\").\n\n"
+        f"Today's events:\n{event_lines}"
+    )
+
+    try:
+        resp = _requests.post(
+            GROQ_CHAT_URL,
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": GROQ_MODEL,
+                "messages": [
+                    {"role": "system", "content": "You are a gentle, factual diary writer for a dementia care app. Never invent facts not given to you."},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0.6,
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip(), None
+    except Exception as exc:
+        return plain_fallback, f"LLM call failed ({exc}); showing raw events instead."
+
+
+@app.get("/generate-diary/{patient_id}")
+async def generate_diary(patient_id: str):
+    top_events = score_diary_events(patient_id)[:5]
+
+    if not top_events:
+        return {"status": "success", "diary": "Nothing notable was logged today yet.", "events_used": []}
+
+    diary_text, note = build_diary_text(top_events)
+    result = {"status": "success", "diary": diary_text, "events_used": top_events}
+    if note:
+        result["note"] = note
+    return result
+
+
+# ─── Daily Diary Video: real slideshow-with-narration .mp4 ────────────
+# Downloads the day's photos (from scored diary events), narrates the same
+# diary text via gTTS (English or Sinhala), and composites both into an
+# actual video file with ffmpeg - not a mock, a real playable .mp4 saved to
+# disk and served back over /videos/<file>.
+import uuid
+import imageio_ffmpeg
+import subprocess
+from gtts import gTTS
+from PIL import ImageDraw, ImageFont
+
+FFMPEG_BIN = imageio_ffmpeg.get_ffmpeg_exe()
+SECONDS_PER_IMAGE = 4
+
+def make_title_card(path, text="MemoCare Daily Summary"):
+    """Fallback background when there are no photos for the day yet, so the
+    video still has something to show, not just blank/black frames."""
+    img = Image.new('RGB', (1280, 720), color=(59, 130, 246))
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.truetype("arial.ttf", 54)
+    except Exception:
+        font = ImageFont.load_default()
+    bbox = draw.textbbox((0, 0), text, font=font)
+    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text(((1280 - w) / 2, (720 - h) / 2), text, fill="white", font=font)
+    img.save(path)
+
+
+@app.get("/generate-diary-video/{patient_id}")
+async def generate_diary_video(patient_id: str, lang: str = "en"):
+    top_events = score_diary_events(patient_id)[:5]
+    if not top_events:
+        return {"status": "success", "diary": "Nothing notable was logged today yet.", "video_url": None}
+
+    diary_text, note = build_diary_text(top_events)
+
+    work_id = uuid.uuid4().hex[:10]
+    work_dir = f"video_tmp_{work_id}"
+    os.makedirs(work_dir, exist_ok=True)
+
+    try:
+        # 1. Gather this run's images - download each event's photo, in score
+        # order, skipping any that fail to fetch.
+        image_paths = []
+        for i, ev in enumerate(top_events):
+            url = ev.get("photo_url")
+            if not url:
+                continue
+            try:
+                img_resp = _requests.get(url, timeout=10)
+                img_resp.raise_for_status()
+                img_path = os.path.join(work_dir, f"img_{i}.jpg")
+                with open(img_path, "wb") as f:
+                    f.write(img_resp.content)
+                # Re-save through PIL to normalize format/mode - ffmpeg's
+                # concat demuxer is picky about mixed/odd image encodings.
+                Image.open(img_path).convert("RGB").save(img_path, "JPEG")
+                image_paths.append(img_path)
+            except Exception:
+                continue
+
+        if not image_paths:
+            title_path = os.path.join(work_dir, "title.jpg")
+            make_title_card(title_path)
+            image_paths = [title_path]
+
+        # 2. Narration audio (English or Sinhala)
+        tts_lang = "si" if lang == "si" else "en"
+        audio_path = os.path.join(work_dir, "narration.mp3")
+        gTTS(text=diary_text, lang=tts_lang).save(audio_path)
+
+        # 3. ffmpeg concat list - the image list is looped indefinitely
+        # (-stream_loop -1) and -shortest trims the final video to the
+        # narration's actual length, so this works regardless of how many
+        # photos there are or how long the narration ends up being.
+        concat_path = os.path.join(work_dir, "images.txt")
+        with open(concat_path, "w") as f:
+            for p in image_paths:
+                f.write(f"file '{os.path.abspath(p)}'\n")
+                f.write(f"duration {SECONDS_PER_IMAGE}\n")
+            f.write(f"file '{os.path.abspath(image_paths[-1])}'\n")  # concat quirk: repeat last entry
+
+        output_name = f"diary_{patient_id}_{work_id}.mp4"
+        output_path = os.path.join("videos", output_name)
+
+        cmd = [
+            FFMPEG_BIN, "-y",
+            "-stream_loop", "-1", "-f", "concat", "-safe", "0", "-i", concat_path,
+            "-i", audio_path,
+            "-map", "0:v", "-map", "1:a",
+            "-c:v", "libx264", "-tune", "stillimage",
+            "-c:a", "aac", "-b:a", "192k",
+            "-pix_fmt", "yuv420p", "-shortest",
+            output_path,
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if proc.returncode != 0:
+            return {"status": "error", "message": f"Video rendering failed: {proc.stderr[-500:]}"}
+
+        result = {
+            "status": "success",
+            "diary": diary_text,
+            "video_url": f"/videos/{output_name}",
+            "photos_used": len(image_paths),
+            "events_used": top_events,
+        }
+        if note:
+            result["note"] = note
+        return result
+    finally:
+        import shutil
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
 # ─── Feature 1: Reminiscence Therapy (Agitation Check) ────────────
@@ -892,10 +1261,6 @@ async def cognitive_score(req: ScoreRequest):
         "health_status": status_text,
         "summary_sinhala": f"අද දවසේ රෝගියාගේ මතක ශක්ති මට්ටම {round(score, 1)}% කි. තත්වය: {status_text}."
     }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 @app.post("/bulk-upload-csv")
 async def bulk_upload_csv(file: UploadFile = File(...)):
@@ -969,6 +1334,7 @@ class BehaviorLog(BaseModel):
     time_of_day: str
     activity: str
     duration_mins: int
+    patient_id: str = "PAT-2026-001"  # caller didn't send one before; default keeps old calls working
 
 @app.post("/predict-behavior")
 async def predict_behavior(log: BehaviorLog):
@@ -979,7 +1345,7 @@ async def predict_behavior(log: BehaviorLog):
         le_physical = joblib.load("models/le_physical.pkl")
         le_time = joblib.load("models/le_time.pkl")
         le_activity = joblib.load("models/le_activity.pkl")
-        
+
         # Encode inputs safely (handle unseen labels by defaulting to 0 or a known class)
         def safe_encode(encoder, value):
             if value in encoder.classes_:
@@ -990,17 +1356,59 @@ async def predict_behavior(log: BehaviorLog):
         phys_enc = safe_encode(le_physical, log.physical_state)
         time_enc = safe_encode(le_time, log.time_of_day)
         act_enc = safe_encode(le_activity, log.activity)
-        
+
         features = [[log.age, cond_enc, phys_enc, time_enc, act_enc, log.duration_mins]]
-        
+
         # Predict: -1 is anomaly, 1 is normal
         prediction = model.predict(features)[0]
         is_anomaly = True if prediction == -1 else False
-        
+        message = "Anomaly detected! Immediate intervention required." if is_anomaly else "Behavior is normal."
+
+        # Keep the full history (diary generator looks at the whole day, not
+        # just "right now"), capped so this stays memory/disk-safe long-term.
+        if log.patient_id not in BEHAVIOR_HISTORY:
+            BEHAVIOR_HISTORY[log.patient_id] = []
+        BEHAVIOR_HISTORY[log.patient_id].append({
+            "activity": log.activity,
+            "time_of_day": log.time_of_day,
+            "is_anomaly": is_anomaly,
+            "message": message,
+            "time": datetime.datetime.now().isoformat(),
+        })
+        BEHAVIOR_HISTORY[log.patient_id] = BEHAVIOR_HISTORY[log.patient_id][-1000:]
+
+        # Anomalies go to the caregiver alert channel, NOT the warm diary -
+        # a wandering flag shouldn't show up as a cheerful diary sentence.
+        if is_anomaly:
+            log_diary_event(log.patient_id, "anomaly_detected", detail=message, channel="caregiver_alert")
+
+        save_db()
+
         return {
             "status": "success",
             "is_anomaly": is_anomaly,
-            "message": "Anomaly detected! Immediate intervention required." if is_anomaly else "Behavior is normal."
+            "message": message
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+import remember_moments
+remember_moments.init(
+    coco_model=model,
+    face_fn=extract_face_embedding,
+    face_detector=mtcnn if FACENET_AVAILABLE else None,
+    object_emb_fn=extract_object_embedding,
+    facenet_ok=FACENET_AVAILABLE,
+    log_diary_event=log_diary_event,
+    save_db=save_db,
+)
+app.include_router(remember_moments.router)
+
+import esp32_live  # after init(): its passive workers use the shared models
+app.include_router(esp32_live.router)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

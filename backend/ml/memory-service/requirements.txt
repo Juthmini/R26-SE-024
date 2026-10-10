@@ -8,3 +8,9 @@ python-multipart
 scikit-learn
 transformers
 facenet-pytorch
+ultralytics
+requests
+gTTS
+imageio-ffmpeg
+cloudinary
+pillow

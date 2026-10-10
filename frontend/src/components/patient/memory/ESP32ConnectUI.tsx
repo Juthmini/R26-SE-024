@@ -21,6 +21,10 @@ export default function ESP32ConnectUI() {
   const [intervalSecs, setIntervalSecs] = useState('10');
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [scanCount, setScanCount] = useState(0);
+
+  const autoScanRef = React.useRef<NodeJS.Timeout | null>(null);
+  const isCapturingRef = React.useRef(false);
 
   const ROOMS = ['Bedroom', 'Living Room', 'Kitchen', 'Bathroom', 'Hallway', 'Outside'];
 
@@ -72,7 +76,7 @@ export default function ESP32ConnectUI() {
       const blob = new Blob([imgRes.data], { type: 'image/jpeg' });
 
       // Forward to backend for YOLO processing
-      const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.20.10.3:5000';
+      const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.80:5000';
       const form = new FormData();
       form.append('file', { uri: `data:image/jpeg;base64,${Buffer.from(imgRes.data).toString('base64')}`, name: 'esp32.jpg', type: 'image/jpeg' } as any);
       form.append('patientId', patientId);

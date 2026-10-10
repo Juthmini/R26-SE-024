@@ -1,20 +1,82 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, FlatList, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, FlatList, Modal, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../../../constants/colors';
 import * as Speech from 'expo-speech';
+import { useVideoPlayer, VideoView } from 'expo-video';
 
 import axios from 'axios';
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.20.10.3:5000';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.80:5000';
+const AI_URL = process.env.EXPO_PUBLIC_AI_URL || 'http://192.168.1.80:8000';
 
 export default function MemoryVaultScreen() {
   const router = useRouter();
   const [memories, setMemories] = useState<any[]>([]);
   const [trainingItem, setTrainingItem] = useState<any>(null);
   const [customName, setCustomName] = useState('');
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [summaryText, setSummaryText] = useState('');
+  const [summaryVideoUrl, setSummaryVideoUrl] = useState<string | null>(null);
+  const [summaryLang, setSummaryLang] = useState<'en' | 'si'>('en');
+
+  // expo-video's player is created once (hooks can't be called conditionally),
+  // then its source is swapped via replaceAsync whenever a new summary video
+  // is generated - this replaces expo-av's <Video source={...}> prop pattern,
+  // which no longer works since Expo Go dropped expo-av's native module.
+  const videoPlayer = useVideoPlayer(null, (player) => {
+    player.loop = false;
+  });
+
+  useEffect(() => {
+    if (summaryVideoUrl) {
+      videoPlayer.replaceAsync(summaryVideoUrl).then(() => videoPlayer.play());
+    }
+  }, [summaryVideoUrl]);
+
+  const generateTodaySummary = async () => {
+    try {
+      setGeneratingSummary(true);
+      setSummaryVideoUrl(null);
+      setSummaryText('');
+
+      const stored = await AsyncStorage.getItem('patient');
+      if (!stored) {
+        Alert.alert('Not logged in', 'Please log in again.');
+        return;
+      }
+      const patient = JSON.parse(stored);
+      // Must match the same id Find My Things uses to log events (patient.id,
+      // the real Mongo ObjectId) - not customerCode, or diary events logged
+      // under one id would never be found under the other.
+      const patientId = patient.id || patient._id;
+
+      const res = await axios.get(`${AI_URL}/generate-diary-video/${patientId}`, {
+        params: { lang: summaryLang },
+        timeout: 60000,
+      });
+      const data = res.data;
+
+      if (data.status === 'error') {
+        Alert.alert('Could not generate summary', data.message || 'Please try again.');
+        return;
+      }
+
+      setSummaryText(data.diary || '');
+      if (data.diary) {
+        Speech.speak(data.diary, { language: summaryLang === 'si' ? 'si-LK' : 'en-US' });
+      }
+      if (data.video_url) {
+        setSummaryVideoUrl(`${AI_URL}${data.video_url}`);
+      }
+    } catch (e) {
+      Alert.alert('Could not generate summary', 'Check your connection and that the backend is running.');
+    } finally {
+      setGeneratingSummary(false);
+    }
+  };
 
   useEffect(() => {
     loadMemories();
@@ -63,7 +125,7 @@ export default function MemoryVaultScreen() {
         try {
           // The patient code or ID used to pair
           const pId = JSON.parse(stored).customerCode || patientId || 'PAT-2026-003';
-          const pyRes = await axios.get(`http://172.20.10.3:8000/vault/${pId}`);
+          const pyRes = await axios.get(`${AI_URL}/vault/${pId}`);
           if (pyRes.data.status === 'success' && pyRes.data.vault) {
             let foundTrainingItem = null;
             
@@ -111,7 +173,7 @@ export default function MemoryVaultScreen() {
       const stored = await AsyncStorage.getItem('patient');
       const pId = stored ? (JSON.parse(stored).customerCode || JSON.parse(stored).id) : 'PAT-2026-003';
       
-      const res = await axios.post(`http://172.20.10.3:8000/train-object`, {
+      const res = await axios.post(`${AI_URL}/train-object`, {
         patient_id: pId,
         original_object: trainingItem.original_object,
         custom_name: customName
@@ -133,7 +195,7 @@ export default function MemoryVaultScreen() {
       const stored = await AsyncStorage.getItem('patient');
       const pId = stored ? (JSON.parse(stored).customerCode || JSON.parse(stored).id) : 'PAT-2026-003';
       
-      const res = await axios.post(`http://172.20.10.3:8000/alert-stranger`, {
+      const res = await axios.post(`${AI_URL}/alert-stranger`, {
         patient_id: pId,
         image_url: trainingItem.image
       });
@@ -173,7 +235,7 @@ export default function MemoryVaultScreen() {
         
         // Remove from backend vault
         try {
-          await axios.delete(`http://172.20.10.3:8000/vault/${pId}/${id}`);
+          await axios.delete(`${AI_URL}/vault/${pId}/${id}`);
         } catch(err) {
           console.warn("Could not delete from backend:", err);
         }
@@ -240,6 +302,52 @@ export default function MemoryVaultScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Memory Vault</Text>
         <Text style={styles.subtitle}>Your loved ones and favorite moments.</Text>
+      </View>
+
+      <View style={styles.summaryBox}>
+        <View style={styles.langToggleRow}>
+          <TouchableOpacity
+            style={[styles.langPill, summaryLang === 'en' && styles.langPillActive]}
+            onPress={() => setSummaryLang('en')}
+          >
+            <Text style={[styles.langPillText, summaryLang === 'en' && styles.langPillTextActive]}>English</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.langPill, summaryLang === 'si' && styles.langPillActive]}
+            onPress={() => setSummaryLang('si')}
+          >
+            <Text style={[styles.langPillText, summaryLang === 'si' && styles.langPillTextActive]}>සිංහල</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={styles.generateBtn}
+          onPress={generateTodaySummary}
+          disabled={generatingSummary}
+        >
+          {generatingSummary ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="sparkles" size={18} color="#fff" />
+              <Text style={styles.generateBtnText}>Generate Today's Summary</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {summaryText ? (
+          <View style={styles.summaryResult}>
+            <Text style={styles.summaryResultText}>{summaryText}</Text>
+            {summaryVideoUrl && (
+              <VideoView
+                player={videoPlayer}
+                style={styles.summaryVideo}
+                nativeControls
+                contentFit="contain"
+              />
+            )}
+          </View>
+        ) : null}
       </View>
 
       <FlatList
@@ -341,6 +449,70 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: '900',
     color: '#0F172A',
+  },
+  summaryBox: {
+    marginHorizontal: 25,
+    marginBottom: 20,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  langToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  langPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  langPillActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  langPillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  langPillTextActive: {
+    color: '#fff',
+  },
+  generateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#3B82F6',
+    borderRadius: 16,
+    paddingVertical: 14,
+  },
+  generateBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  summaryResult: {
+    marginTop: 14,
+    gap: 12,
+  },
+  summaryResultText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#1E293B',
+    fontWeight: '500',
+  },
+  summaryVideo: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 16,
+    backgroundColor: '#000',
   },
   subtitle: {
     fontSize: 18,

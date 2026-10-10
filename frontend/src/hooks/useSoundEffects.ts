@@ -1,4 +1,4 @@
-import { Audio } from "expo-av";
+import { AudioPlayer, createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useRef } from "react";
 import { getSoundEffectsEnabled } from "../utils/soundEffectsPreference";
@@ -27,7 +27,7 @@ async function fireHaptic(type: SoundType) {
 }
 
 export const useSoundEffects = () => {
-  const soundsRef = useRef<Record<SoundType, Audio.Sound | null>>({
+  const soundsRef = useRef<Record<SoundType, AudioPlayer | null>>({
     back: null,
     success: null,
     error: null,
@@ -37,13 +37,13 @@ export const useSoundEffects = () => {
   useEffect(() => {
     const sounds = soundsRef.current;
 
-    Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
     });
 
     return () => {
-      Object.values(sounds).forEach((sound) => sound?.unloadAsync());
+      Object.values(sounds).forEach((sound) => sound?.remove());
     };
   }, []);
 
@@ -65,11 +65,12 @@ export const useSoundEffects = () => {
           click: require("@/assets/audio/click.wav"),
         };
 
-        const { sound } = await Audio.Sound.createAsync(soundMap[type]);
-        soundsRef.current[type] = sound;
+        soundsRef.current[type] = createAudioPlayer(soundMap[type]);
       }
 
-      await soundsRef.current[type]?.replayAsync();
+      const player = soundsRef.current[type];
+      await player?.seekTo(0);
+      player?.play();
     } catch (error) {
       console.log("Sound playback error:", error);
     }
