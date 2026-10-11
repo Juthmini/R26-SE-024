@@ -21,7 +21,7 @@ const P = {
 };
 const MAX_LISTEN_S = 7;
 
-type Media = { kind: 'photo' | 'reveal' | 'slideshow' | 'emoji' | 'calendar' | 'visit' | 'scene' | 'sequence' | 'none';
+type Media = { kind: 'photo' | 'reveal' | 'slideshow' | 'emoji' | 'calendar' | 'visit' | 'scene' | 'sequence' | 'hidden' | 'order' | 'none';
   urls?: string[]; emoji?: string; icon?: string; label_si?: string; box?: number[] };
 type Choice = { si: string; en: string; image?: string; icon?: string };
 type Question = { id: string; type: string; domain: string; prompt_si: string; prompt_en: string;
@@ -201,8 +201,28 @@ function SceneArt({ icon, label }: { icon?: string; label?: string }) {
   );
 }
 
+function HiddenPhoto({ url, box, revealed }: { url: string; box?: number[]; revealed: boolean }) {
+  const [x1, y1, x2, y2] = box || [0.4, 0.4, 0.6, 0.6];
+  const pad = 0.04;
+  return (
+    <View style={styles.mediaFrame}>
+      <Image source={{ uri: url }} style={{ width: '100%', aspectRatio: 4 / 3 }} />
+      {!revealed && (
+        <View style={[styles.hideTile, {
+          left: `${Math.max(0, x1 - pad) * 100}%`, top: `${Math.max(0, y1 - pad) * 100}%`,
+          width: `${Math.min(1, x2 - x1 + 2 * pad) * 100}%`, height: `${Math.min(1, y2 - y1 + 2 * pad) * 100}%`,
+        }]}>
+          <Text style={styles.hideQ}>?</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function QuestionMedia({ media, revealed }: { media: Media; revealed: boolean }) {
   if (media.kind === 'visit') return <VisitArt />;
+  if (media.kind === 'hidden' && media.urls?.[0]) return <HiddenPhoto url={media.urls[0]} box={media.box} revealed={revealed} />;
+  if (media.kind === 'order') return null;
   if (media.kind === 'scene') return <SceneArt icon={media.icon} label={media.label_si} />;
   if (media.kind === 'sequence')
     return <View style={styles.artCard}><Text style={{ fontSize: 56 }}>⏳</Text><Text style={styles.emojiLabel}>මුලින්ම වුණේ?</Text></View>;
@@ -234,6 +254,10 @@ export default function MemoryQuizUI() {
   const [heard, setHeard] = useState('');
   const [points, setPoints] = useState<number[]>([]);
   const [picked, setPicked] = useState<number | null>(null);
+  // Photo-order game: the tapped order, how many are fixed by hints, and the right order once known.
+  const [seq, setSeq] = useState<number[]>([]);
+  const [locked, setLocked] = useState(0);
+  const [rightOrder, setRightOrder] = useState<number[] | null>(null);
   const [correctIdx, setCorrectIdx] = useState<number | null>(null);
   const [happy, setHappy] = useState(false);
   const [left, setLeft] = useState(MAX_LISTEN_S);
@@ -257,6 +281,9 @@ export default function MemoryQuizUI() {
     setBegun(true);
     setStage('free');
     setPicked(null);
+    setSeq([]);
+    setLocked(0);
+    setRightOrder(null);
     setCorrectIdx(null);
     setHeard('');
     // The bridge sentence first, so the game flows like a conversation.
@@ -351,6 +378,8 @@ export default function MemoryQuizUI() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     }
     if (d.correct_choice != null) setCorrectIdx(d.correct_choice);
+    if (d.lock) { setSeq(d.lock); setLocked(d.lock.length); }
+    if (d.correct_order) setRightOrder(d.correct_order);
     if (d.next === 'hint') setStage('hint');
     if (d.next === 'choice') setStage('choice');
     await say(d.say_si);
@@ -413,6 +442,16 @@ export default function MemoryQuizUI() {
     if (phase !== 'waiting') return;
     setPicked(i);
     post({ choice: String(i), response_ms: String(Date.now() - askedAt.current) });
+  };
+
+  const tapOrder = (i: number) => {
+    if (phase !== 'waiting' || !q || seq.includes(i)) return;
+    const next = [...seq, i];
+    setSeq(next);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    if (next.length === q.choices.length) {
+      post({ order: JSON.stringify(next), response_ms: String(Date.now() - askedAt.current) });
+    }
   };
 
   const dontKnow = () => {
@@ -515,14 +554,14 @@ export default function MemoryQuizUI() {
                 <Text style={styles.retryText}>{q.lead_si}</Text>
               </View>
             )}
-            <QuestionMedia key={q.id} media={q.media} revealed={stage !== 'free' || correctIdx != null} />
+            <QuestionMedia key={q.id} media={q.media} revealed={q.type === 'hidden' ? correctIdx != null : stage !== 'free' || correctIdx != null} />
             {stage === 'hint' && (
               <View style={styles.hintCard}>
                 <Ionicons name="bulb" size={20} color={P.honeyDeep} />
                 <Text style={styles.hintText}>{q.hint_si}</Text>
               </View>
             )}
-            {(stage === 'choice' || correctIdx != null) && q.choices.some((c) => c.image || c.icon) && (
+            {q.type !== 'order' && (stage === 'choice' || correctIdx != null) && q.choices.some((c) => c.image || c.icon) && (
               <View style={styles.grid}>
                 {q.choices.map((c, i) => {
                   const isRight = correctIdx === i;
@@ -548,7 +587,7 @@ export default function MemoryQuizUI() {
                 })}
               </View>
             )}
-            {(stage === 'choice' || correctIdx != null) && q.choices.length > 0 && !q.choices.some((c) => c.image || c.icon) && (
+            {q.type !== 'order' && (stage === 'choice' || correctIdx != null) && q.choices.length > 0 && !q.choices.some((c) => c.image || c.icon) && (
               <View style={{ gap: 10, marginTop: 6 }}>
                 {q.choices.map((c, i) => {
                   const isRight = correctIdx === i;
@@ -566,6 +605,37 @@ export default function MemoryQuizUI() {
                   );
                 })}
               </View>
+            )}
+            {q.type === 'order' && (
+              <View style={styles.grid}>
+                {q.choices.map((c, i) => {
+                  const pos = (rightOrder || seq).indexOf(i);
+                  const isLocked = !rightOrder && pos >= 0 && pos < locked;
+                  return (
+                    <Pressable key={i} disabled={busy || !!rightOrder || isLocked || phase !== 'waiting'}
+                      onPress={() => tapOrder(i)}
+                      style={({ pressed }) => [styles.tile, pressed && { transform: [{ scale: 0.97 }] },
+                        pos >= 0 && { borderColor: rightOrder ? P.sage : P.teal },
+                        isLocked && { backgroundColor: '#E3F1EE' }]}>
+                      {c.image
+                        ? <Image source={{ uri: c.image }} style={styles.tileImg} />
+                        : <View style={[styles.tileImg, styles.tileIcon]}><Text style={{ fontSize: 46 }}>{c.icon}</Text></View>}
+                      <Text style={styles.tileText} numberOfLines={2}>{c.si}</Text>
+                      {pos >= 0 && (
+                        <View style={[styles.orderBadge, rightOrder && { backgroundColor: P.sage }]}>
+                          <Text style={styles.orderBadgeText}>{pos + 1}</Text>
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+            {q.type === 'order' && !rightOrder && seq.length > locked && (
+              <Pressable onPress={() => setSeq((x) => x.slice(0, locked))} style={styles.orderReset}>
+                <Ionicons name="refresh" size={16} color={P.soft} />
+                <Text style={styles.sideText}>ආයෙත් පටන් ගන්න</Text>
+              </Pressable>
             )}
             {!!heard && (
               <Text style={styles.heard}>ඔයා කිව්වා: “{heard}”</Text>
@@ -593,8 +663,8 @@ export default function MemoryQuizUI() {
             <Ionicons name="help" size={22} color={P.soft} />
             <Text style={styles.sideText}>මතක නැහැ</Text>
           </Pressable>
-          <Pressable onPress={listen} disabled={busy}
-            style={[styles.mic, phase === 'listening' && { backgroundColor: P.clay }, busy && { opacity: 0.55 }]}>
+          <Pressable onPress={listen} disabled={busy || q.type === 'order'}
+            style={[styles.mic, phase === 'listening' && { backgroundColor: P.clay }, (busy || q.type === 'order') && { opacity: 0.35 }]}>
             {phase === 'thinking' ? <ActivityIndicator color="#fff" size="large" />
               : phase === 'listening' ? <Text style={styles.micCount}>{left}</Text>
               : <Ionicons name="mic" size={40} color="#fff" />}
@@ -604,6 +674,7 @@ export default function MemoryQuizUI() {
               {phase === 'listening' ? 'අහගෙන ඉන්නවා…\nඉවර නම් ඔබන්න'
                 : phase === 'thinking' ? 'හිතනවා…'
                 : phase === 'talking' ? 'අහගෙන ඉන්න'
+                : q.type === 'order' ? 'පින්තූර\nපිළිවෙළට ඔබන්න'
                 : stage === 'choice' ? 'කියන්න,\nනැත්නම් තෝරන්න' : 'ඔබලා\nකියන්න'}
             </Text>
           </View>
@@ -663,6 +734,13 @@ const styles = StyleSheet.create({
   moodBtn: { width: '48.5%', backgroundColor: P.card, borderRadius: 24, paddingVertical: 20, alignItems: 'center', gap: 6,
     borderWidth: 2, borderColor: P.line },
   moodText: { fontSize: 18, fontWeight: '800', color: P.ink },
+  hideTile: { position: 'absolute', backgroundColor: '#2A6F6A', borderRadius: 14, borderWidth: 3, borderColor: '#FFFDF8',
+    borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  hideQ: { color: '#FFFDF8', fontSize: 40, fontWeight: '900' },
+  orderBadge: { position: 'absolute', top: 12, left: 12, width: 36, height: 36, borderRadius: 18, backgroundColor: '#2A6F6A',
+    alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#fff' },
+  orderBadgeText: { color: '#fff', fontSize: 18, fontWeight: '900' },
+  orderReset: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: 12 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12, marginTop: 6 },
   tile: { width: '48.5%', backgroundColor: P.card, borderRadius: 22, padding: 8, borderWidth: 2.5, borderColor: P.line,
     shadowColor: '#8A6D45', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },

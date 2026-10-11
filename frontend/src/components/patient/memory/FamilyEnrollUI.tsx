@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import axios from 'axios';
 import {
-  AI_URL, RELATIONS, getCaregiverPin, getPatientId, speak, stopSpeaking,
+  AI_URL, RELATIONS, getCaregiverPin, getPatientId, getPatientName, speak, stopSpeaking,
 } from '../../../services/memoryAI';
 
 // Several angles make the face gallery robust from day one (see adaptive learning).
@@ -35,6 +35,8 @@ export default function FamilyEnrollUI() {
   const [count, setCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
+  const [patientName, setPatientName] = useState('');
+  useEffect(() => { getPatientName().then(setPatientName).catch(() => {}); }, []);
   const [relation, setRelation] = useState<string | null>(null);
   const [talkOk, setTalkOk] = useState(false); // consent to summarise visit conversations - off unless given
   const [message, setMessage] = useState('');
@@ -139,7 +141,7 @@ export default function FamilyEnrollUI() {
       </TouchableOpacity>
       <View style={{ flex: 1 }}>
         <Text style={s.title}>අලුත් කෙනෙක්</Text>
-        <Text style={s.sub}>Register a family member</Text>
+        <Text style={s.sub}>{patientName ? `👤 ${patientName} ට ලියාපදිංචි කරනවා` : 'Register a family member'}</Text>
       </View>
     </View>
   );

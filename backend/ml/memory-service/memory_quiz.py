@@ -439,6 +439,52 @@ def q_talk(pid, conv, item, day):
     return q
 
 
+def q_order(pid, events, day):
+    """Fun: put three real photos of today in the order they happened."""
+    picked = []
+    for e in events:  # events are sorted by time
+        if all(e["target"] != x["target"] for x in picked) and (
+                not picked or (datetime.datetime.fromisoformat(e["time"]) -
+                               datetime.datetime.fromisoformat(picked[-1]["time"])).total_seconds() >= 900):
+            picked.append(e)
+    if len(picked) < 3:
+        return None
+    if len(picked) > 3:
+        idx = sorted(random.sample(range(len(picked)), 3))
+        picked = [picked[i] for i in idx]
+    cards = [{**e["choice"]} for e in picked]
+    shuffled = cards[:]
+    while shuffled == cards:
+        random.shuffle(shuffled)
+    order = [shuffled.index(c) for c in cards]
+    q = _q("order", "time", "පොඩි සෙල්ලමක්! මේ අද ඔයාගේ දවසේ පින්තූර තුනක්. වුණු පිළිවෙළට ඔබන්න - මුලින්ම වුණු එක පළමුවෙන්.",
+           "A little game: tap these three photos of today in the order they happened.",
+           {"si": " → ".join(c["si"] for c in cards), "en": " -> ".join(c["en"] for c in cards)}, [],
+           f"මුලින්ම වුණේ {cards[0]['si']}.", "Hint: the first one.", shuffled, order[0],
+           f"මුලින්ම {cards[0]['si']}, ඊට පස්සේ {cards[1]['si']}, අන්තිමට {cards[2]['si']}.", {"kind": "order"}, day)
+    q["correct_order"] = order
+    return q
+
+
+def q_hidden(pid, m, obj, day):
+    """Fun: one thing in today's photo is covered with a ? tile - what is it?"""
+    box = obj.get("box")
+    if not box or (box[2] - box[0]) * (box[3] - box[1]) < 0.01:
+        return None
+    lbl = obj["label"]
+    correct = {"si": obj["label_si"], "en": lbl, "icon": EMOJI.get(lbl, "📦")}
+    pool = [{"si": rm.si_name(l), "en": l, "icon": EMOJI.get(l, "📦")}
+            for l in ["book", "remote", "cell phone", "bottle", "cup", "glasses", "wallet", "pill bottle"] if l != lbl]
+    choices, idx = _choices(correct, pool, k=4)
+    use = object_use(lbl) or {}
+    return _q("hidden", "objects", "පොඩි සෙල්ලමක්! මේ අද පින්තූරේ එක දෙයක් ❓ ලකුණෙන් වහලා තියෙන්නේ. ඒ මොකක්ද?",
+              "A little game: something in today's photo is covered. What is it?",
+              correct, [obj["label_si"], lbl] + [w for w, l in rm.SPOKEN_TO_LABEL.items() if l == lbl],
+              (f"ඒක {use['use_si']} පාවිච්චි කරන දෙයක්." if use.get("use_si") else "ඒ ළඟ තියෙන දේවල් බලලා හිතන්න."),
+              "Hint: what it is used for.", choices, idx, f"ඒ ඔයාගේ {obj['label_si']}!",
+              {"kind": "hidden", "urls": [obj.get("photo_url") or m["photo_urls"][0]], "box": box}, day)
+
+
 def q_which_first(pid, a, b, day):
     """Order of two real events from the day (a happened before b)."""
     first = {**a["choice"]}
@@ -684,6 +730,9 @@ def build_questions(pid):
                       q_used_for(pid, o["label"], day, photos)):
                 if q:
                     add(q, f"object:{o['label']}")
+            fun = q_hidden(pid, m, o, day)
+            if fun:
+                add(fun, f"object:{o['label']}")
             filler = q_object_place(pid, m, o, day) if m.get("room_si") else None
             if filler:  # only if the practical ones run out
                 filler["filler"] = True
@@ -699,31 +748,45 @@ def build_questions(pid):
     if pairs:
         a, b = random.choice(pairs)
         add(q_which_first(pid, a, b, day), f"order:{a['target']}|{b['target']}")
+    seq = q_order(pid, ev, day)
+    if seq:
+        add(seq, f"sequence:{day}")
 
     if not cands and not talk_qs:
         return [], level, avg
 
-    # Adaptive: the weakest memory areas first, keeping variety (one per type and
-    # per target, then at most two of a type). Conversation questions are all kept.
+    # Tonight's set, in a fixed shape:
+    #   1. "who came?" when someone visited (the day's main event)
+    #   2. up to 4 questions about what was said, one by one
+    #   3. practical questions, weakest memory areas first, with variety
+    #   4. one fun picture game as a bonus at the end (photo order / what's hidden)
     weak = _domain_scores(_finished(pid)[-10:])
     random.shuffle(cands)
     cands.sort(key=lambda q: (bool(q.get("filler")), weak.get(q["domain"], 50)))
+    fun = [q for q in cands if q["type"] in ("order", "hidden")]
+    cands = [q for q in cands if q not in fun]
+    who = next((q for q in cands if q["type"] == "who_came"), None)
+    talk = talk_qs[:4]
     picked, used_targets, type_count = [], set(), {}
-    room = max(2, n_target - len(talk_qs))
+    if who:
+        used_targets.add(who["target"])
+        type_count["who_came"] = 1
+    room = max(2, n_target - len(talk) - (1 if who else 0))
     for max_per_type in (1, 2):
         for q in cands:
             if len(picked) >= room:
                 break
-            if q in picked or q["target"] in used_targets or type_count.get(q["type"], 0) >= max_per_type:
+            if q is who or q in picked or q["target"] in used_targets or type_count.get(q["type"], 0) >= max_per_type:
                 continue
             picked.append(q)
             type_count[q["type"]] = type_count.get(q["type"], 0) + 1
             used_targets.add(q["target"])
-    # Order like a conversation: who came -> what we talked about -> my things.
-    visit_first = [q for q in picked if q["type"] in ("who_came", "person_photo", "visit_time", "visit_count")]
-    rest = [q for q in picked if q not in visit_first]
-    rest.sort(key=lambda q: bool(q.get("filler")))
-    ordered = visit_first[:1] + talk_qs[:8] + visit_first[1:] + rest
+    visit_more = [q for q in picked if q["type"] in ("person_photo", "visit_time", "visit_count")]
+    rest = sorted([q for q in picked if q not in visit_more], key=lambda q: bool(q.get("filler")))
+    bonus = next((q for q in fun if q["target"] not in used_targets or q["type"] == "order"), None)
+    if bonus:
+        bonus["bonus"] = True
+    ordered = ([who] if who else []) + talk + visit_more + rest + ([bonus] if bonus else [])
     _add_leads(ordered)
     return ordered, level, avg
 
@@ -742,7 +805,9 @@ def _add_leads(qs):
         elif q["domain"] in ("objects", "places", "time") and not objects_started:
             objects_started = True
             lead = "දැන් ඔයාගේ බඩු ගැනයි, අද කරපු දේවල් ගැනයි කතා කරමු." if i else ""
-        if i == len(qs) - 1 and len(qs) > 2:
+        if q.get("bonus"):
+            lead = "🎁 අන්තිමට පොඩි බෝනස් සෙල්ලමක්!"
+        elif i == len(qs) - 1 and len(qs) > 2:
             lead = (lead + " " if lead else "") + "මේ අන්තිම ප්‍රශ්නය!"
         q["lead_si"] = lead.strip()
 
@@ -865,7 +930,9 @@ async def quiz_mood(session_id: str = Form(...), mood: str = Form(...)):
     # Tired or sad -> a shorter game today; unasked questions don't count against the score.
     limit = 4 if mood in ("tired", "sad") else len(s["questions"])
     if limit < len(s["questions"]):
-        s["questions"] = s["questions"][:limit]
+        bonus = [q for q in s["questions"] if q.get("bonus")]
+        # keep the fun bonus game - it matters most on a low day
+        s["questions"] = s["questions"][:limit - len(bonus)] + bonus
         _add_leads(s["questions"])
     _save()
     n = len(s["questions"])
@@ -911,7 +978,7 @@ async def day_record(patient_id: str, date: str = ""):
 @router.post("/quiz/answer")
 async def quiz_answer(session_id: str = Form(...), q_index: int = Form(...), stage: str = Form("free"),
                       choice: int = Form(-1), dont_know: bool = Form(False), response_ms: int = Form(0),
-                      file: UploadFile = File(None)):
+                      order: str = Form(""), file: UploadFile = File(None)):
     s = _find_session(session_id)
     if not s or s["finished"]:
         return {"status": "error", "message": "Quiz session not found or already finished"}
@@ -922,6 +989,13 @@ async def quiz_answer(session_id: str = Form(...), q_index: int = Form(...), sta
     heard, said = "", ""
     if dont_know:
         verdict = "dont_know"
+    elif order and q.get("correct_order"):
+        try:
+            given = [int(x) for x in json.loads(order)]
+        except Exception:
+            return {"status": "error", "message": "order must be a JSON list of choice indexes"}
+        verdict = "correct" if given == q["correct_order"] else "wrong"
+        said = " → ".join(q["choices"][i]["si"] for i in given if 0 <= i < len(q["choices"]))
     elif choice >= 0:
         verdict = "correct" if choice == q["correct_choice"] else "wrong"
         said = q["choices"][choice]["si"] if choice < len(q["choices"]) else ""
@@ -941,7 +1015,7 @@ async def quiz_answer(session_id: str = Form(...), q_index: int = Form(...), sta
                 "say_si": "සමාවෙන්න, මට හරියට ඇහුණේ නැහැ. ආයෙත් ටිකක් ලොකුවට කියන්න."}
 
     attempt = {"stage": stage, "verdict": verdict, "heard": heard, "said": said, "ms": response_ms,
-               "via": "choice" if choice >= 0 else "voice" if file is not None else "skip"}
+               "via": "order" if order else "choice" if choice >= 0 else "voice" if file is not None else "skip"}
     rec = next((a for a in s["answers"] if a["q_index"] == q_index), None)
     if rec is None:
         rec = {"q_index": q_index, "q_id": q["id"], "type": q["type"], "domain": q["domain"],
@@ -957,6 +1031,14 @@ async def quiz_answer(session_id: str = Form(...), q_index: int = Form(...), sta
         rec["done"] = True
         praise = random.choice(PRAISE if stage == "free" else PRAISE_HELPED)
         out = {"verdict": "correct", "next": "next", "points": rec["points"], "say_si": f"{praise} {q['reveal_si']}"}
+    elif q["type"] == "order" and stage != "choice":
+        # Ladder for the photo game: the hint fixes the first photo, the next step the second.
+        cards = [q["choices"][i]["si"] for i in q["correct_order"]]
+        nxt = "hint" if stage == "free" else "choice"
+        fixed = 1 if nxt == "hint" else 2
+        tip = f"මුලින්ම වුණේ {cards[0]}." if fixed == 1 else f"මුලින්ම {cards[0]}, ඊට පස්සේ {cards[1]}."
+        out = {"verdict": verdict, "next": nxt, "points": 0, "lock": q["correct_order"][:fixed],
+               "say_si": f"{random.choice(COMFORT)} {tip} දැන් ඉතුරු ටික පිළිවෙළට ඔබන්න."}
     elif stage == "free":
         out = {"verdict": verdict, "next": "hint", "points": 0,
                "say_si": f"{random.choice(COMFORT)} පොඩි ඉඟියක් දෙන්නම්. {q['hint_si']} දැන් ආයෙත් කියන්න."}
@@ -976,6 +1058,8 @@ async def quiz_answer(session_id: str = Form(...), q_index: int = Form(...), sta
                "say_si": f"{random.choice(COMFORT)} {q['reveal_si']} හෙට අපි ආයෙත් බලමු."}
     if rec["done"]:
         out["correct_choice"] = q["correct_choice"]
+        if q.get("correct_order"):
+            out["correct_order"] = q["correct_order"]
     _save()
     return {"status": "success", "said": said, **out}
 

@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import axios from 'axios';
 import {
-  AI_URL, FamilyAlert, Person, clearCaregiverPin, getCaregiverPin, getPatientId, setCaregiverPin, timeAgo,
+  AI_URL, FamilyAlert, Person, clearCaregiverPin, getCaregiverPin, getPatientId, getPatientName, setCaregiverPin, timeAgo,
 } from '../../../services/memoryAI';
 import { PeopleArt } from './findThings/Illustrations';
 
@@ -23,6 +23,9 @@ const MULTIPART = { headers: { 'Content-Type': 'multipart/form-data' }, timeout:
 export default function FamilyUI() {
   const router = useRouter();
   const [pid, setPid] = useState<string | null>(null);
+  const [patientName, setPatientName] = useState('');
+  // Always show WHOSE family this is - a wrong patient here once saved a grandson to another patient.
+  React.useEffect(() => { getPatientName().then(setPatientName).catch(() => {}); }, []);
   const [gate, setGate] = useState<Gate>('loading');
   const [pin, setPin] = useState('');
   const [pin2, setPin2] = useState('');
@@ -155,7 +158,7 @@ export default function FamilyUI() {
       </TouchableOpacity>
       <View style={{ flex: 1 }}>
         <Text style={s.title}>පවුලේ අය</Text>
-        <Text style={s.sub}>Family registration · caregiver</Text>
+        <Text style={s.sub}>{patientName ? `👤 ${patientName} ගේ පවුල` : 'Family registration · caregiver'}</Text>
       </View>
       {gate === 'open' && (
         <TouchableOpacity style={s.lockBtn} onPress={() => { clearCaregiverPin(); setGate('enter'); }}>
