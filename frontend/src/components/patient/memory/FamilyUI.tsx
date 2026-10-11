@@ -30,6 +30,7 @@ export default function FamilyUI() {
   const [verified, setVerified] = useState<Person[]>([]);
   const [pending, setPending] = useState<Person[]>([]);
   const [alerts, setAlerts] = useState<FamilyAlert[]>([]);
+  const [allVisitors, setAllVisitors] = useState(false);
 
   const loadFamily = useCallback(async (id: string) => {
     try {
@@ -37,6 +38,7 @@ export default function FamilyUI() {
       setVerified(res.data.verified || []);
       setPending(res.data.pending || []);
       setAlerts(res.data.alerts || []);
+      axios.get(`${AI_URL}/family/consent-all/${id}`, { timeout: 8000 }).then((r) => setAllVisitors(!!r.data.on)).catch(() => {});
     } catch {}
   }, []);
 
@@ -118,6 +120,24 @@ export default function FamilyUI() {
       `${p.name} (${p.relation_si}) රෝගියා බලන්න ආවම කතා කරන දේවල් app එක අහලා කෙටි සාරාංශයක් විතරක් තියාගන්නවා. ` +
         'Audio එක save වෙන්නේ නැහැ. මේකට එයාගේ අවසරය ගත්තද?',
       [{ text: 'නැහැ', style: 'cancel' }, { text: 'ඔව්, අවසර තියෙනවා', onPress: save }],
+    );
+  };
+
+  const toggleAllVisitors = () => {
+    const allow = !allVisitors;
+    const save = async () => {
+      const cur = getCaregiverPin();
+      if (!pid || !cur) return setGate('enter');
+      const r = await axios.post(`${AI_URL}/family/consent-all`,
+        form({ patient_id: pid, pin: cur, allow: allow ? 'true' : 'false' }), MULTIPART).catch(() => null);
+      if (r?.data?.status === 'success') setAllVisitors(allow);
+    };
+    if (!allow) return save();
+    Alert.alert(
+      'සියලුම අමුත්තන්ගේ කතාබහ?',
+      'ලියාපදිංචි නැති අය (අසල්වැසියන්, යාළුවෝ) ආවත් කතා කරන දේවල් කෙටි සාරාංශයක් විදිහට තියාගන්නවා. ' +
+        'Audio save වෙන්නේ නැහැ, කැමරා තිරයේ "අහගෙන ඉන්නවා" ලකුණ පේනවා. අමුත්තන්ට මේ ගැන කියන්න.',
+      [{ text: 'නැහැ', style: 'cancel' }, { text: 'ඔව්, දාන්න', onPress: save }],
     );
   };
 
@@ -235,6 +255,17 @@ export default function FamilyUI() {
           </>
         )}
 
+        <TouchableOpacity style={[s.allCard, allVisitors && s.allCardOn]} onPress={toggleAllVisitors} activeOpacity={0.85}>
+          <Ionicons name={allVisitors ? 'mic' : 'mic-off'} size={24} color={allVisitors ? '#fff' : '#0f766e'} />
+          <View style={{ flex: 1 }}>
+            <Text style={[s.allTitle, allVisitors && { color: '#fff' }]}>සියලුම අමුත්තන්ගේ කතාබහ</Text>
+            <Text style={[s.allSub, allVisitors && { color: '#ccfbf1' }]}>
+              {allVisitors ? 'ඕනෑම කෙනෙක් ආවත් කතාව සාරාංශ කරනවා' : 'දැන් අවසර දීපු පවුලේ අයගේ විතරයි'}
+            </Text>
+          </View>
+          <Text style={[s.allState, allVisitors && { color: '#fff' }]}>{allVisitors ? 'ON' : 'OFF'}</Text>
+        </TouchableOpacity>
+
         <Text style={s.section}>ලියාපදිංචි පවුලේ අය ({verified.length})</Text>
         {verified.length === 0 ? (
           <Text style={s.empty}>තවම කවුරුත් නැහැ. උඩ තියෙන බොත්තමෙන් එකතු කරන්න.</Text>
@@ -267,6 +298,12 @@ export default function FamilyUI() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0fdfa' },
   scroll: { padding: 20, paddingBottom: 48 },
+  allCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 18, padding: 14,
+    marginTop: 18, borderWidth: 1.5, borderColor: '#99f6e4' },
+  allCardOn: { backgroundColor: '#0f766e', borderColor: '#0f766e' },
+  allTitle: { fontSize: 15.5, fontWeight: '900', color: '#0f172a' },
+  allSub: { fontSize: 12.5, color: '#64748b', marginTop: 2 },
+  allState: { fontSize: 13, fontWeight: '900', color: '#0f766e' },
   talkChip: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, paddingHorizontal: 8, paddingVertical: 4,
     borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#fff', alignSelf: 'center' },
   talkChipText: { fontSize: 11, fontWeight: '700', color: '#64748b' },

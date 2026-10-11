@@ -6,12 +6,26 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import axios from 'axios';
 import { AI_URL, Lang, Person, getPatientId, speak, stopSpeaking } from '../../../services/memoryAI';
 import { QuizArt, StoryArt } from './findThings/Illustrations';
+import { useVideoPlayer, VideoView } from 'expo-video';
 
 type Story = {
   title: string; story: string; photos: string[]; people: Person[]; moment_count?: number;
   date?: string; auto?: boolean; minutes_with_people?: number;
 };
 type Day = { date: string; title: string; cover: string; auto: boolean };
+type Said = { si: string; en?: string };
+type DayRecord = {
+  conversations: { id: string; time: string; seconds?: number; summary_si: string; relation_si?: string; name?: string;
+    photo_url?: string; visitor_asked?: Said[]; patient_said?: Said[]; promises?: Said[] }[];
+  games: { time: string; score: number; stars: number; max_stars: number; mood?: string;
+    questions: { prompt_si: string; answer_si: string; said: string; points: number; image?: string | null }[] }[];
+  counts: { moments: number; visits: number; finds: number };
+};
+const MOOD_EMOJI: Record<string, string> = { happy: '😊', ok: '🙂', tired: '😴', sad: '😢' };
+const HELP = [
+  { label: 'අමතක වුණා', color: '#C2410C' }, { label: 'තෝරලා', color: '#D9A441' },
+  { label: 'ඉඟියෙන්', color: '#2FA597' }, { label: 'තනියම', color: '#0B6E66' },
+];
 
 const today = () => {
   const d = new Date();
@@ -27,12 +41,17 @@ export default function MemoryStoryUI() {
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [invite, setInvite] = useState(false);
+  const [record, setRecord] = useState<DayRecord | null>(null);
   const stopped = useRef(false);
+  // Video diary of the selected day: story narration over the day's photos and visitors.
+  const [video, setVideo] = useState<{ state: 'idle' | 'making' | 'ready' | 'error'; url?: string; msg?: string }>({ state: 'idle' });
+  const player = useVideoPlayer(null, (p) => { p.loop = false; });
 
   const load = useCallback(async (l: Lang, d: string, refresh = false) => {
     setLoading(true);
     stopSpeaking();
     setSpeaking(false);
+    setVideo({ state: 'idle' });
     try {
       const pid = await getPatientId();
       const [res, book] = await Promise.all([
@@ -44,6 +63,9 @@ export default function MemoryStoryUI() {
       ]);
       setStory(res.data.story ? res.data : { title: '', story: res.data.message || '', photos: [], people: [] });
       if (book) setDays(book.data.days || []);
+      // Everything kept for this day: visits & talks, every game question and answer.
+      axios.get(`${AI_URL}/day-record/${pid}`, { params: { date: d }, timeout: 10000 })
+        .then((r) => setRecord(r.data)).catch(() => setRecord(null));
     } catch {
       setStory({ title: '', story: l === 'si' ? 'කතාව ගේන්න බැරි වුණා. AI සේවාව බලන්න.' : 'Could not load the story.', photos: [], people: [] });
     }
@@ -58,6 +80,22 @@ export default function MemoryStoryUI() {
     return `${dd}/${m}`;
   };
   const dayChips = days.some((d) => d.date === today()) ? days : [{ date: today(), title: '', cover: '', auto: false }, ...days];
+
+  const makeVideo = async () => {
+    stopSpeaking();
+    setVideo({ state: 'making' });
+    try {
+      const pid = await getPatientId();
+      const res = await axios.get(`${AI_URL}/memory-video/${pid}`, { params: { date }, timeout: 400000 });
+      if (res.data.status !== 'success') throw new Error(res.data.message);
+      const url = `${AI_URL}${res.data.video_url}`;
+      setVideo({ state: 'ready', url });
+      await player.replaceAsync(url);
+      player.play();
+    } catch (e: any) {
+      setVideo({ state: 'error', msg: lang === 'si' ? 'වීඩියෝ එක හදන්න බැරි වුණා. පස්සේ ආයෙත් උත්සාහ කරන්න.' : 'Could not make the video.' });
+    }
+  };
 
   const play = async () => {
     if (!story) return;
@@ -184,11 +222,71 @@ export default function MemoryStoryUI() {
                 <Text style={s.videoText}>{lang === 'si' ? 'දැන්ම කතාව ලියන්න' : 'Write today’s story now'}</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={s.videoBtn} onPress={() => router.push('/patient/memory' as any)}>
-              <Ionicons name="film" size={20} color="#be185d" />
-              <Text style={s.videoText}>{lang === 'si' ? 'වීඩියෝ දින සටහන' : 'Video diary'}</Text>
+            {video.state === 'ready' && (
+              <View style={s.videoCard}>
+                <VideoView player={player} style={s.videoView} nativeControls contentFit="contain" />
+              </View>
+            )}
+            {video.state === 'error' && <Text style={s.videoErr}>{video.msg}</Text>}
+            <TouchableOpacity style={s.videoBtn} onPress={makeVideo} disabled={video.state === 'making'}>
+              {video.state === 'making' ? <ActivityIndicator color="#be185d" /> : <Ionicons name="film" size={20} color="#be185d" />}
+              <Text style={s.videoText}>
+                {video.state === 'making'
+                  ? (lang === 'si' ? 'වීඩියෝ එක හදනවා... (විනාඩියක් විතර)' : 'Making the video... (about a minute)')
+                  : (lang === 'si' ? 'වීඩියෝ දින සටහන' : 'Video diary')}
+              </Text>
             </TouchableOpacity>
           </>
+        )}
+
+        {record && (
+          <View style={s.recordWrap}>
+            <Text style={s.recordTitle}>📒 {dayLabel(date)} දවසේ සටහන</Text>
+            <View style={s.countRow}>
+              <View style={s.countBox}><Text style={s.countNum}>{record.counts.moments}</Text><Text style={s.countLbl}>මතක</Text></View>
+              <View style={s.countBox}><Text style={s.countNum}>{record.counts.visits}</Text><Text style={s.countLbl}>ආපු අය</Text></View>
+              <View style={s.countBox}><Text style={s.countNum}>{record.counts.finds}</Text><Text style={s.countLbl}>හොයපු වාර</Text></View>
+            </View>
+
+            {record.conversations.length > 0 && <Text style={s.recordSection}>💬 කතා කරපු දේවල්</Text>}
+            {record.conversations.map((c) => (
+              <View key={c.id} style={s.recCard}>
+                <View style={s.recHead}>
+                  {c.photo_url ? <Image source={{ uri: c.photo_url }} style={s.recFace} /> : <Text style={{ fontSize: 26 }}>🙂</Text>}
+                  <Text style={s.recWho}>{c.relation_si}{c.name && c.name !== c.relation_si ? ` ${c.name}` : ''} · {c.time.slice(11, 16)}</Text>
+                </View>
+                <Text style={s.recText}>{c.summary_si}</Text>
+                {c.visitor_asked?.map((x, i) => <Text key={`a${i}`} style={s.recLine}>❓ එයා ඇහුවා: {x.si}</Text>)}
+                {c.patient_said?.map((x, i) => <Text key={`s${i}`} style={s.recLine}>🗣 ඔයා කිව්වා: {x.si}</Text>)}
+                {c.promises?.map((x, i) => <Text key={`p${i}`} style={[s.recLine, { color: '#8A5A12' }]}>📅 {x.si}</Text>)}
+              </View>
+            ))}
+
+            {record.games.length > 0 && <Text style={s.recordSection}>🦉 මතක සෙල්ලම</Text>}
+            {record.games.map((g, gi) => (
+              <View key={gi} style={s.recCard}>
+                <Text style={s.recWho}>
+                  {g.mood ? `${MOOD_EMOJI[g.mood] || ''} ` : ''}{g.time} · තරු {g.stars}/{g.max_stars} · {Math.round(g.score)}/100
+                </Text>
+                {g.questions.map((q, qi) => (
+                  <View key={qi} style={s.qRow}>
+                    {q.image ? <Image source={{ uri: q.image }} style={s.qImg} /> : null}
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.qPrompt}>{q.prompt_si}</Text>
+                      {!!q.said && <Text style={s.qSaid}>ඔයාගේ උත්තරය: {q.said}</Text>}
+                      <Text style={s.qAnswer}>හරි උත්තරය: {q.answer_si}</Text>
+                    </View>
+                    <View style={[s.qBadge, { backgroundColor: HELP[q.points]?.color || '#94a3b8' }]}>
+                      <Text style={s.qBadgeText}>{HELP[q.points]?.label}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ))}
+            {record.conversations.length === 0 && record.games.length === 0 && (
+              <Text style={s.recEmpty}>මේ දවසේ කතාබහ හරි මතක සෙල්ලම් හරි නැහැ.</Text>
+            )}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -230,6 +328,30 @@ const s = StyleSheet.create({
   minutes: { marginTop: 12, color: '#c2410c', fontWeight: '800', fontSize: 15 },
   videoBtn: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', borderRadius: 18, paddingVertical: 14, marginTop: 10, borderWidth: 2, borderColor: '#fbcfe8' },
   videoText: { color: '#be185d', fontWeight: '900', fontSize: 16 },
+  recordWrap: { marginTop: 26, borderTopWidth: 1, borderColor: '#fbcfe8', paddingTop: 18 },
+  recordTitle: { fontSize: 19, fontWeight: '900', color: '#0f172a', marginBottom: 12 },
+  countRow: { flexDirection: 'row', gap: 10, marginBottom: 6 },
+  countBox: { flex: 1, backgroundColor: '#fff', borderRadius: 16, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#fce7f3' },
+  countNum: { fontSize: 22, fontWeight: '900', color: '#be185d' },
+  countLbl: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  recordSection: { fontSize: 16, fontWeight: '900', color: '#334155', marginTop: 16, marginBottom: 8 },
+  recCard: { backgroundColor: '#fff', borderRadius: 18, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#fce7f3' },
+  recHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
+  recFace: { width: 36, height: 36, borderRadius: 18 },
+  recWho: { fontSize: 14.5, fontWeight: '800', color: '#0f172a' },
+  recText: { fontSize: 15.5, lineHeight: 23, color: '#1e293b' },
+  recLine: { fontSize: 14, color: '#475569', marginTop: 4, lineHeight: 20 },
+  recEmpty: { color: '#94a3b8', textAlign: 'center', marginTop: 8 },
+  qRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderColor: '#f1f5f9' },
+  qImg: { width: 44, height: 44, borderRadius: 10 },
+  qPrompt: { fontSize: 14.5, fontWeight: '700', color: '#0f172a', lineHeight: 21 },
+  qSaid: { fontSize: 13.5, color: '#475569', marginTop: 3 },
+  qAnswer: { fontSize: 13.5, color: '#0B6E66', fontWeight: '700', marginTop: 2 },
+  qBadge: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
+  qBadgeText: { color: '#fff', fontSize: 11.5, fontWeight: '800' },
+  videoCard: { marginTop: 14, borderRadius: 22, overflow: 'hidden', backgroundColor: '#000' },
+  videoView: { width: '100%', aspectRatio: 16 / 9 },
+  videoErr: { color: '#b91c1c', textAlign: 'center', marginTop: 10, fontWeight: '700' },
   quizBtn: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 18, paddingVertical: 16, marginTop: 10, backgroundColor: '#2A6F6A' },
   quizText: { color: '#fff', fontWeight: '900', fontSize: 16 },
   invite: { marginTop: 14, backgroundColor: '#FBF5EA', borderRadius: 22, padding: 16, borderWidth: 1.5, borderColor: '#EADFCB' },

@@ -14,3 +14,4 @@ gTTS
 imageio-ffmpeg
 cloudinary
 pillow
+edge-tts

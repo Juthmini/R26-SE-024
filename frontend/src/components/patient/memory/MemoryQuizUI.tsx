@@ -25,9 +25,10 @@ type Media = { kind: 'photo' | 'reveal' | 'slideshow' | 'emoji' | 'calendar' | '
   urls?: string[]; emoji?: string; icon?: string; label_si?: string; box?: number[] };
 type Choice = { si: string; en: string; image?: string; icon?: string };
 type Question = { id: string; type: string; domain: string; prompt_si: string; prompt_en: string;
-  hint_si: string; choices: Choice[]; media: Media; retry?: boolean };
+  hint_si: string; choices: Choice[]; media: Media; lead_si?: string };
+type Mood = { key: string; emoji: string; si: string };
 type Stage = 'free' | 'hint' | 'choice';
-type Phase = 'loading' | 'talking' | 'waiting' | 'listening' | 'thinking' | 'done' | 'empty' | 'error';
+type Phase = 'loading' | 'talking' | 'mood' | 'waiting' | 'listening' | 'thinking' | 'done' | 'empty' | 'error';
 
 // ─── Owl companion ──────────────────────────────────────────────────────────
 function Owl({ mood, size = 92 }: { mood: 'talk' | 'listen' | 'happy' | 'idle'; size?: number }) {
@@ -237,6 +238,8 @@ export default function MemoryQuizUI() {
   const [happy, setHappy] = useState(false);
   const [left, setLeft] = useState(MAX_LISTEN_S);
   const [final, setFinal] = useState<{ stars: number; max_stars: number; say_si: string } | null>(null);
+  const [moods, setMoods] = useState<Mood[]>([]);
+  const [begun, setBegun] = useState(false); // questions start after the greeting and check-in
   const askedAt = useRef(0);
   const stopEarly = useRef(false);
   const alive = useRef(true);
@@ -251,11 +254,13 @@ export default function MemoryQuizUI() {
   }, []);
 
   const ask = useCallback(async (q: Question) => {
+    setBegun(true);
     setStage('free');
     setPicked(null);
     setCorrectIdx(null);
     setHeard('');
-    await say(q.prompt_si);
+    // The bridge sentence first, so the game flows like a conversation.
+    await say(q.lead_si ? `${q.lead_si} ${q.prompt_si}` : q.prompt_si);
     askedAt.current = Date.now();
   }, [say]);
 
@@ -265,6 +270,7 @@ export default function MemoryQuizUI() {
     setFinal(null);
     setPoints([]);
     setQi(0);
+    setBegun(false);
     try {
       const pid = await getPatientId();
       if (!pid) throw new Error('no patient');
@@ -286,8 +292,9 @@ export default function MemoryQuizUI() {
       }
       setSessionId(res.data.session_id);
       setQuestions(res.data.questions);
+      setMoods(res.data.moods || []);
       await say(res.data.intro_si);
-      if (alive.current) await ask(res.data.questions[0]);
+      if (alive.current) setPhase('mood'); // check-in before any question
     } catch {
       setPhase('error');
       setBubble('AI සේවාවට සම්බන්ධ වෙන්න බැහැ. ටිකකින් ආයෙත් උත්සාහ කරන්න.');
@@ -299,6 +306,21 @@ export default function MemoryQuizUI() {
     return () => { alive.current = false; stopSpeaking(); recorder.stop().catch(() => {}); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
+
+  const chooseMood = async (m: Mood) => {
+    setPhase('thinking');
+    try {
+      const form = new FormData();
+      form.append('session_id', sessionId);
+      form.append('mood', m.key);
+      const res = await axios.post(`${AI_URL}/quiz/mood`, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 15000 });
+      setQuestions(res.data.questions);
+      await say(res.data.say_si);
+      if (alive.current && res.data.questions.length) await ask(res.data.questions[0]);
+    } catch {
+      if (questions.length) await ask(questions[0]);
+    }
+  };
 
   const finish = useCallback(async (sid: string) => {
     try {
@@ -466,6 +488,17 @@ export default function MemoryQuizUI() {
           </View>
         </View>
 
+        {phase === 'mood' && (
+          <View style={styles.moodGrid}>
+            {moods.map((m) => (
+              <Pressable key={m.key} onPress={() => chooseMood(m)}
+                style={({ pressed }) => [styles.moodBtn, pressed && { transform: [{ scale: 0.96 }] }]}>
+                <Text style={{ fontSize: 46 }}>{m.emoji}</Text>
+                <Text style={styles.moodText}>{m.si}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
         {phase === 'empty' && (
           <View style={{ alignItems: 'center', marginTop: 10 }}>
             <SceneArt icon="📷" />
@@ -474,12 +507,12 @@ export default function MemoryQuizUI() {
             </Pressable>
           </View>
         )}
-        {q && phase !== 'loading' && phase !== 'error' && phase !== 'empty' && (
+        {q && begun && phase !== 'loading' && phase !== 'error' && phase !== 'empty' && (
           <>
-            {q.retry && (
+            {!!q.lead_si && (
               <View style={styles.retryTag}>
-                <Ionicons name="refresh" size={14} color={P.teal} />
-                <Text style={styles.retryText}>ආයෙත් මතක් කරමු</Text>
+                <Ionicons name="chatbubble-ellipses" size={14} color={P.teal} />
+                <Text style={styles.retryText}>{q.lead_si}</Text>
               </View>
             )}
             <QuestionMedia key={q.id} media={q.media} revealed={stage !== 'free' || correctIdx != null} />
@@ -554,7 +587,7 @@ export default function MemoryQuizUI() {
       </ScrollView>
 
       {/* Answer bar */}
-      {q && phase !== 'error' && phase !== 'empty' && (
+      {q && begun && phase !== 'error' && phase !== 'empty' && (
         <View style={styles.answerBar}>
           <Pressable onPress={dontKnow} disabled={phase !== 'waiting'} style={[styles.sideBtn, phase !== 'waiting' && { opacity: 0.4 }]}>
             <Ionicons name="help" size={22} color={P.soft} />
@@ -626,6 +659,10 @@ const styles = StyleSheet.create({
   choiceBadge: { width: 38, height: 38, borderRadius: 19, backgroundColor: P.ink, alignItems: 'center', justifyContent: 'center' },
   choiceBadgeText: { color: '#fff', fontSize: 17, fontWeight: '800' },
   choiceText: { flex: 1, fontSize: 20, fontWeight: '700', color: P.ink },
+  moodGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12, marginTop: 6 },
+  moodBtn: { width: '48.5%', backgroundColor: P.card, borderRadius: 24, paddingVertical: 20, alignItems: 'center', gap: 6,
+    borderWidth: 2, borderColor: P.line },
+  moodText: { fontSize: 18, fontWeight: '800', color: P.ink },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12, marginTop: 6 },
   tile: { width: '48.5%', backgroundColor: P.card, borderRadius: 22, padding: 8, borderWidth: 2.5, borderColor: P.line,
     shadowColor: '#8A6D45', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
@@ -642,7 +679,7 @@ const styles = StyleSheet.create({
   sceneQText: { color: '#fff', fontSize: 22, fontWeight: '900' },
   retryTag: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: '#E3F1EE',
     borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 10 },
-  retryText: { color: P.teal, fontSize: 13, fontWeight: '700' },
+  retryText: { color: P.teal, fontSize: 13, fontWeight: '700', flexShrink: 1 },
   heard: { textAlign: 'center', color: P.soft, fontSize: 15, marginTop: 12, fontStyle: 'italic' },
   starBurst: { position: 'absolute', alignSelf: 'center', top: 30 },
   answerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 22,

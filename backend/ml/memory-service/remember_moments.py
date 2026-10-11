@@ -524,6 +524,10 @@ def save_moment_core(patient_id, labels, lat=None, lng=None, room=None, source="
             seen[lbl]["time"] = now
             seen[lbl]["times_seen"] = seen[lbl].get("times_seen", 0) + 1
             _add_interaction(patient_id, "object", lbl, si_name(lbl), dwell_seconds)
+    hook = _ctx.get("on_new_object")
+    for lbl in new:
+        if hook:
+            hook(lbl)  # memory_quiz learns what this kind of object is used for
     wanted = new + moved
     if not wanted:
         _save()
@@ -1193,27 +1197,82 @@ async def transcribe(file: UploadFile = File(...), lang: str = Form("si"), patie
     }
 
 
+# The app speaks with gTTS (the voice the patient is used to). A neural voice
+# (Microsoft Edge read-aloud, e.g. si-LK-ThiliniNeural) can be switched on with
+# TTS_ENGINE=neural; gTTS remains the fallback either way.
+TTS_ENGINE = os.environ.get("TTS_ENGINE", "gtts")
+TTS_VOICES = {"si": os.environ.get("TTS_VOICE_SI", "si-LK-ThiliniNeural"),
+              "en": os.environ.get("TTS_VOICE_EN", "en-US-AriaNeural")}
+
+
+async def synthesize(text, lang, path):
+    """Write speech for `text` to `path` (mp3)."""
+    if TTS_ENGINE == "neural":
+        try:
+            import edge_tts
+            await edge_tts.Communicate(text, TTS_VOICES[lang], rate="-8%").save(path)
+            if os.path.getsize(path) > 1000:
+                return "neural"
+        except Exception as e:
+            print("neural TTS failed, using gTTS:", e)
+    gTTS(text=text, lang=lang).save(path)
+    return "gtts"
+
+
 @router.get("/tts")
 async def tts(text: str, lang: str = "si"):
     lang = "si" if lang == "si" else "en"
-    key = hashlib.sha1(f"{lang}:{text}".encode("utf-8")).hexdigest()[:20]
+    voice = TTS_VOICES[lang] if TTS_ENGINE == "neural" else "gtts"
+    key = hashlib.sha1(f"{voice}:{lang}:{text}".encode("utf-8")).hexdigest()[:20]
     path = os.path.join(TTS_DIR, f"{key}.mp3")
     if not os.path.exists(path):
-        gTTS(text=text, lang=lang).save(path)
+        await synthesize(text, lang, path)
     return FileResponse(path, media_type="audio/mpeg")
 
 
+GROQ_FALLBACK_MODEL = os.environ.get("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
+
+
+def _extract_json(text):
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("no JSON in the reply")
+    return json.loads(text[start:end + 1])
+
+
 def _llm_json(prompt):
-    r = requests.post(
-        f"{GROQ_BASE}/chat/completions",
-        headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-        json={"model": GROQ_MODEL, "temperature": 0,
-              "response_format": {"type": "json_object"},
-              "messages": [{"role": "user", "content": prompt}]},
-        timeout=20,
-    )
-    r.raise_for_status()
-    return json.loads(r.json()["choices"][0]["message"]["content"])
+    """JSON from the LLM, resilient to the two failures seen in practice:
+    400 json_validate_failed (long Sinhala replies that break strict JSON mode ->
+    retry without it and pull the JSON out), and 429 rate limits (short wait,
+    then the smaller fallback model)."""
+    import re as _re
+    import time
+    attempts = [(GROQ_MODEL, True), (GROQ_MODEL, True), (GROQ_MODEL, False), (GROQ_FALLBACK_MODEL, False)]
+    last = None
+    for i, (model, strict) in enumerate(attempts):
+        body = {"model": model, "temperature": 0, "messages": [{"role": "user", "content": prompt}],
+                # gpt-oss "thinks" before answering; on long Sinhala prompts the default
+                # budget ran out mid-JSON (finish_reason=length). Low effort + room fixes it.
+                "max_completion_tokens": 6000}
+        if model.startswith("openai/gpt-oss"):
+            body["reasoning_effort"] = "low"
+        if strict:
+            body["response_format"] = {"type": "json_object"}
+        try:
+            r = requests.post(f"{GROQ_BASE}/chat/completions",
+                              headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+                              json=body, timeout=60)
+            if r.status_code == 429:
+                # Free tier: 8000 tokens per minute. Wait as long as Groq asks (max ~40 s).
+                wait = _re.search(r"try again in ([\d.]+)s", r.text)
+                last = requests.HTTPError(f"429 rate limited ({model})")
+                time.sleep(min(40.0, float(wait.group(1)) + 1) if wait else 5)
+                continue
+            r.raise_for_status()
+            return _extract_json(r.json()["choices"][0]["message"]["content"])
+        except Exception as e:
+            last = e
+    raise last
 
 
 # ─── Memory vault story ──────────────────────────────────────────────────────

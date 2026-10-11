@@ -78,6 +78,15 @@ export default function RememberLiveUI() {
   const talkRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const talk = useRef<{ visitId: string; personId: string; stop: boolean; startedAt: number; done: Promise<void> | null } | null>(null);
   const [talking, setTalking] = useState(false);
+  const endTalkRef = useRef<(() => void) | null>(null);
+  const allVisitors = useRef(false); // caregiver allowed summarising talks with any visitor
+  const [talkInfo, setTalkInfo] = useState<{ who: string; photo?: string; startedAt: number } | null>(null);
+  const [talkSecs, setTalkSecs] = useState(0);
+  useEffect(() => {
+    if (!talkInfo) return setTalkSecs(0);
+    const t = setInterval(() => setTalkSecs(Math.round((Date.now() - talkInfo.startedAt) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [talkInfo]);
 
   const [cam, setCam] = useState<CameraSource | null>(null);
   const [patientId, setPatientId] = useState<string | null>(null);
@@ -117,7 +126,7 @@ export default function RememberLiveUI() {
   const lastSaved = useRef<{ key: string; at: number } | null>(null);
   const pendingFace = useRef<string | null>(null);
   // One continuous visit of a person in front of the camera.
-  const visit = useRef<{ start: number; lastSeen: number; misses: number; checkedAt: number; personId: string | null; done: boolean } | null>(null);
+  const visit = useRef<{ start: number; lastSeen: number; misses: number; checkedAt: number; personId: string | null; done: boolean; talkDone?: boolean } | null>(null);
   const [personProgress, setPersonProgress] = useState(0);
   // Shown on the person's box instead of "පුද්ගලයා": who they are, or that they're unknown.
   const [personTag, setPersonTag] = useState<{ text: string; color: string } | null>(null);
@@ -126,13 +135,16 @@ export default function RememberLiveUI() {
     mounted.current = true;
     (async () => {
       setCam(await loadCameraSource());
-      setPatientId(await getPatientId());
+      const pid = await getPatientId();
+      setPatientId(pid);
+      if (pid) axios.get(`${AI_URL}/family/consent-all/${pid}`, { timeout: 8000 })
+        .then((r) => { allVisitors.current = !!r.data.on; }).catch(() => {});
       await Location.requestForegroundPermissionsAsync();
     })();
     return () => {
       mounted.current = false;
       stopSpeaking();
-      if (talk.current) talk.current.stop = true; // leaving the screen ends the recording
+      endTalkRef.current?.(); // leaving the screen ends the recording - and still summarises it
     };
   }, []);
 
@@ -256,7 +268,7 @@ export default function RememberLiveUI() {
       await speak(res.data.say_si);
       busy.current = false;
       setPhase('watching');
-      if (result === 'verified' && res.data.person?.conversation_ok && visit.current) talkStart(res.data.person.id);
+      if (result === 'verified' && (res.data.person?.conversation_ok || allVisitors.current) && visit.current) talkStart(res.data.person.id, res.data.person.relation_si, res.data.person.photo_url);
     } catch {
       await speak('සමාවෙන්න, තේරුණේ නැහැ. ආයෙත් කියන්න.');
       setAskRetry(true);
@@ -269,12 +281,25 @@ export default function RememberLiveUI() {
   // and send each for transcription; the server keeps only a summary when the
   // visit ends (audio and transcript are discarded). A visible "listening"
   // badge is shown the whole time.
-  const talkStart = useCallback(async (personId: string) => {
+  const talkStart = useCallback(async (personId: string, who = '', photo?: string) => {
     if (!patientId || talk.current) return;
+    setTalkInfo({ who, photo, startedAt: Date.now() });
     const t = { visitId: `v-${Date.now()}`, personId, stop: false, startedAt: Date.now(), done: null as Promise<void> | null };
     talk.current = t;
     setTalking(true);
+    const upload = (uri: string, secs: number) => {
+      const f = new FormData();
+      f.append('patient_id', patientId);
+      f.append('person_id', personId);
+      f.append('visit_id', t.visitId);
+      f.append('seconds', String(secs));
+      f.append('file', { uri, name: 'clip.m4a', type: 'audio/m4a' } as any);
+      return axios.post(`${AI_URL}/visit/audio`, f, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 })
+        .catch(() => {}); // a lost clip only makes the summary shorter
+    };
     t.done = (async () => {
+      const uploads: Promise<unknown>[] = [];
+      let lastUri = '';
       while (!t.stop && mounted.current) {
         try {
           await startListening(talkRecorder);
@@ -286,19 +311,17 @@ export default function RememberLiveUI() {
         try {
           await talkRecorder.stop();
           const uri = talkRecorder.uri;
-          if (uri && Date.now() - clipStart > 3000) {
-            const f = new FormData();
-            f.append('patient_id', patientId);
-            f.append('person_id', personId);
-            f.append('visit_id', t.visitId);
-            f.append('seconds', String(Math.round((Date.now() - clipStart) / 1000)));
-            f.append('file', { uri, name: 'clip.m4a', type: 'audio/m4a' } as any);
-            await axios.post(`${AI_URL}/visit/audio`, f, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 });
+          const secs = Math.round((Date.now() - clipStart) / 1000);
+          if (uri && secs > 3) {
+            // No gap: the next clip starts recording while this one uploads.
+            // (If the recorder ever reused the same file, wait for that upload first.)
+            if (uri === lastUri) await Promise.all(uploads);
+            uploads.push(upload(uri, secs));
+            lastUri = uri;
           }
-        } catch {
-          // a lost clip only makes the summary shorter
-        }
+        } catch {}
       }
+      await Promise.all(uploads); // every clip is in before the visit is summarised
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).catch(() => {});
     })();
   }, [patientId, talkRecorder]);
@@ -309,6 +332,7 @@ export default function RememberLiveUI() {
     t.stop = true;
     talk.current = null;
     setTalking(false);
+    setTalkInfo(null);
     await t.done;
     const f = new FormData();
     f.append('patient_id', patientId);
@@ -316,11 +340,28 @@ export default function RememberLiveUI() {
     f.append('seconds', String(Math.round((Date.now() - t.startedAt) / 1000)));
     try {
       const res = await axios.post(`${AI_URL}/visit/end`, f, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 });
-      if (res.data.result === 'saved' && mounted.current) {
-        showToast({ text: `💬 ${res.data.summary_si}`, tone: 'info' }, 6000);
+      if (!mounted.current) return;
+      if (res.data.result === 'saved') {
+        showToast({ text: `💬 ${res.data.summary_si}`, tone: 'info' }, 7000);
+      } else if (res.data.result === 'too_short') {
+        showToast({ text: '💬 කතාව හරියට ඇහුණේ නැහැ (ඉතා කෙටියි / ශබ්දය අඩුයි). ෆෝන් එක ළඟින් කතා කරන්න.', tone: 'warn' }, 7000);
+      } else if (res.data.result === 'unclear') {
+        showToast({ text: '💬 කතාව පැහැදිලි නැති නිසා සාරාංශයක් හැදුවේ නැහැ.', tone: 'warn' }, 7000);
+      } else if (res.data.status === 'error') {
+        showToast({ text: '💬 සාරාංශය හදන්න බැරි වුණා. පස්සේ ආයෙත් උත්සාහ කරන්න.', tone: 'warn' }, 7000);
       }
-    } catch {}
+    } catch {
+      if (mounted.current) showToast({ text: '💬 AI සේවාවට සම්බන්ධ වෙන්න බැහැ.', tone: 'warn' }, 6000);
+    }
   }, [patientId]);
+
+  // Ends the conversation now (button, pause, leaving the screen) and summarises it;
+  // the same visit won't start a new recording on its own.
+  const finishTalk = () => {
+    if (visit.current) visit.current.talkDone = true;
+    talkEnd();
+  };
+  endTalkRef.current = () => { if (talk.current) talkEnd(); };
 
   const skipPerson = () => {
     pendingFace.current = null;
@@ -373,7 +414,7 @@ export default function RememberLiveUI() {
         showToast({ text: d.say_si, photo: d.person.photo_url, tone: 'info' }, 4500);
         // Greet first, then (with consent) start listening to the visit's conversation.
         speak(d.say_si).then(() => {
-          if (d.person.conversation_ok && visit.current === v) talkStart(d.person.id);
+          if ((d.person.conversation_ok || allVisitors.current) && visit.current === v) talkStart(d.person.id, `${d.person.relation_si}${who}`, d.person.photo_url);
         });
       } else if (d.status === 'pending_known') {
         v.done = true; // seen before but not yet approved by the caregiver - don't ask again
@@ -429,6 +470,9 @@ export default function RememberLiveUI() {
         } else {
           checkPerson(false); // instant recognition attempt, repeated while their face gets clearer
         }
+      }
+      if (allVisitors.current && !talk.current && !v.talkDone && !busy.current && together >= PERSON_DWELL_MS) {
+        talkStart(v.personId || 'visitor', v.personId ? '' : 'අමුත්තා');
       }
       // The countdown ring only makes sense for someone we don't recognise yet.
       if (!v.done) setPersonProgress(Math.min(1, together / PERSON_DWELL_MS));
@@ -531,6 +575,26 @@ export default function RememberLiveUI() {
     };
   }, [cam, patientId, permission?.granted]);
 
+  // Adaptive reminders: the room camera is the screen that stays on all day, so
+  // it checks every two minutes and says any reminder that is due (once a day each).
+  useEffect(() => {
+    if (!patientId) return;
+    const check = async () => {
+      if (busy.current || talk.current) return; // never interrupt a question or a visit
+      try {
+        const r = await axios.get(`${AI_URL}/reminders/due/${patientId}`, { timeout: 8000 });
+        for (const d of r.data.due || []) {
+          showToast({ text: `⏰ ${d.say_si}`, photo: d.photo_url, tone: 'info' }, 9000);
+          await speak(d.say_si);
+        }
+      } catch {}
+    };
+    const t = setInterval(check, 120000);
+    check();
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId]);
+
   // ─── Render ──────────────────────────────────────────────────────────
   if (!cam) return <View style={s.container} />;
   if (cam.source === 'phone' && !permission?.granted) {
@@ -579,7 +643,7 @@ export default function RememberLiveUI() {
           style={s.iconBtn}>
           <Ionicons name="moon" size={21} color="#fff" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setPaused((p) => !p)} style={s.iconBtn}>
+        <TouchableOpacity onPress={() => { if (!paused && talk.current) finishTalk(); setPaused((p) => !p); }} style={s.iconBtn}>
           <Ionicons name={paused ? 'play' : 'pause'} size={22} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -666,6 +730,21 @@ export default function RememberLiveUI() {
           <Text style={s.status}>{statusText[phase]}</Text>
         </View>
 
+        {talkInfo && (
+          <View style={s.talkCard}>
+            {talkInfo.photo ? <Image source={{ uri: talkInfo.photo }} style={s.talkFace} /> : <Ionicons name="people" size={30} color="#0F9D8A" />}
+            <View style={{ flex: 1 }}>
+              <Text style={s.talkTitle}>🎙 {talkInfo.who} එක්ක කතාබහ</Text>
+              <Text style={s.talkSub}>
+                {String(Math.floor(talkSecs / 60)).padStart(2, '0')}:{String(talkSecs % 60).padStart(2, '0')} · එයා ගියාම කෙටි සාරාංශයක් හදනවා · audio save වෙන්නේ නැහැ
+              </Text>
+            </View>
+            <TouchableOpacity style={s.talkDoneBtn} onPress={finishTalk}>
+              <Text style={s.talkDoneText}>ඉවරයි</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {engaged.length > 0 && phase === 'watching' && (
           <View style={s.chips}>
             {engaged.map((n) => (
@@ -722,6 +801,13 @@ export default function RememberLiveUI() {
 }
 
 const s = StyleSheet.create({
+  talkCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#ECFDF8', borderRadius: 18, padding: 12,
+    marginTop: 10, borderWidth: 1, borderColor: '#A7E3D6' },
+  talkFace: { width: 44, height: 44, borderRadius: 22 },
+  talkTitle: { fontSize: 15.5, fontWeight: '900', color: '#0F2A24' },
+  talkSub: { fontSize: 12, color: '#475569', marginTop: 2, lineHeight: 17 },
+  talkDoneBtn: { backgroundColor: '#0F9D8A', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  talkDoneText: { color: '#fff', fontWeight: '900', fontSize: 13 },
   talkBadge: { position: 'absolute', top: 12, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: 'rgba(190,18,60,0.88)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
   talkDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#fecaca' },

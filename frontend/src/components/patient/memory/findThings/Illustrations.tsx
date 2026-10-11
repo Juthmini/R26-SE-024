@@ -137,6 +137,86 @@ export function FamilyArt({ size = 96 }: Props) {
   );
 }
 
+export function TalkArt({ size = 96 }: Props) {
+  // Two speech bubbles - a visit's conversation.
+  return (
+    <Svg width={size} height={size} viewBox="0 0 120 120">
+      <Circle cx="60" cy="60" r="56" fill="#DCF5EF" />
+      <Path d="M22 34 h50 a10 10 0 0 1 10 10 v22 a10 10 0 0 1 -10 10 h-30 l-12 12 v-12 h-8 a10 10 0 0 1 -10 -10 v-22 a10 10 0 0 1 10 -10z" fill="#0F9D8A" />
+      <Circle cx="36" cy="55" r="4" fill="#fff" /><Circle cx="48" cy="55" r="4" fill="#fff" /><Circle cx="60" cy="55" r="4" fill="#fff" />
+      <Path d="M60 62 h36 a9 9 0 0 1 9 9 v16 a9 9 0 0 1 -9 9 h-4 v10 l-11 -10 h-21 a9 9 0 0 1 -9 -9 v-16 a9 9 0 0 1 9 -9z" fill="#F2B84B" stroke="#fff" strokeWidth="3" />
+      <Path d="M70 76 h24 M70 85 h16" stroke="#fff" strokeWidth="4" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function ReminderArt({ size = 96 }: Props) {
+  // Alarm clock with a pill - reminders learned from the day.
+  return (
+    <Svg width={size} height={size} viewBox="0 0 120 120">
+      <Circle cx="60" cy="60" r="56" fill="#FEF3C7" />
+      <Path d="M30 34 l12 -10 M90 34 l-12 -10" stroke="#B45309" strokeWidth="6" strokeLinecap="round" />
+      <Circle cx="60" cy="62" r="30" fill="#fff" stroke="#F59E0B" strokeWidth="5" />
+      <Path d="M60 44 v18 l12 8" stroke="#0F2A24" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M42 96 l-6 8 M78 96 l6 8" stroke="#B45309" strokeWidth="5" strokeLinecap="round" />
+      <Rect x="78" y="74" width="30" height="14" rx="7" fill="#0F9D8A" transform="rotate(-30 93 81)" />
+      <Path d="M93 74 v14" stroke="#fff" strokeWidth="3" transform="rotate(-30 93 81)" />
+    </Svg>
+  );
+}
+
+export function RoutineArt({ size = 96 }: Props) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 120 120">
+      <Circle cx="60" cy="60" r="56" fill="#DBEAFE" />
+      <Rect x="30" y="24" width="52" height="70" rx="8" fill="#fff" stroke="#3B82F6" strokeWidth="3" />
+      <Rect x="44" y="18" width="24" height="12" rx="4" fill="#3B82F6" />
+      <Path d="M40 46 l5 5 l9 -10 M40 64 l5 5 l9 -10" stroke="#22C55E" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M60 47 h14 M60 65 h14 M42 82 h32" stroke="#93C5FD" strokeWidth="4" strokeLinecap="round" />
+      <Circle cx="86" cy="84" r="16" fill="#FDE68A" stroke="#fff" strokeWidth="3" />
+      <Path d="M86 76 v8 l6 4" stroke="#B45309" strokeWidth="3" fill="none" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function VaultArt({ size = 96 }: Props) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 120 120">
+      <Circle cx="60" cy="60" r="56" fill="#E0E7FF" />
+      <Rect x="20" y="36" width="56" height="44" rx="6" fill="#fff" stroke="#6366F1" strokeWidth="3" transform="rotate(-8 48 58)" />
+      <Rect x="42" y="40" width="58" height="46" rx="6" fill="#fff" stroke="#6366F1" strokeWidth="3" />
+      <Path d="M48 78 l14 -16 l10 10 l8 -8 l14 14z" fill="#86EFAC" />
+      <Circle cx="84" cy="52" r="6" fill="#FCD34D" />
+      <Path d="M88 22 c-4 -6 -12 -2 -10 4 c1 4 10 10 10 10 s9 -6 10 -10 c2 -6 -6 -10 -10 -4z" fill="#F43F5E" />
+    </Svg>
+  );
+}
+
+export function GamesArt({ size = 96 }: Props) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 120 120">
+      <Circle cx="60" cy="60" r="56" fill="#FFEDD5" />
+      <Path d="M28 48 h28 v-6 a8 8 0 0 1 16 0 v6 h20 v20 h-6 a8 8 0 0 0 0 16 h6 v14 h-64 z" fill="#F97316" />
+      <Path d="M28 48 v22 h6 a8 8 0 0 1 0 16 h-6 v12" stroke="#fff" strokeWidth="3" fill="none" />
+      <Circle cx="50" cy="72" r="5" fill="#fff" /><Circle cx="70" cy="66" r="5" fill="#fff" />
+      <Path d="M94 22 l2.5 5 5.5 0.8 -4 3.9 1 5.5 -5 -2.6 -5 2.6 1 -5.5 -4 -3.9 5.5 -0.8 Z" fill="#FBBF24" />
+    </Svg>
+  );
+}
+
+export function ScreeningArt({ size = 96 }: Props) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 120 120">
+      <Circle cx="60" cy="60" r="56" fill="#FCE7F3" />
+      <Rect x="32" y="24" width="56" height="74" rx="8" fill="#fff" stroke="#DB2777" strokeWidth="3" />
+      <Rect x="46" y="18" width="28" height="12" rx="4" fill="#DB2777" />
+      <Path d="M60 56 c-5 -8 -16 -3 -13 5 c2 5 13 13 13 13 s11 -8 13 -13 c3 -8 -8 -13 -13 -5z" fill="#EC4899" />
+      <Path d="M42 86 h36" stroke="#F9A8D4" strokeWidth="4" strokeLinecap="round" />
+      <Path d="M30 70 h10 l4 -8 l6 16 l4 -8 h6" stroke="#22C55E" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 export function PhoneCamArt({ size = 40 }: Props) {
   return (
     <Svg width={size} height={size} viewBox="0 0 48 48">

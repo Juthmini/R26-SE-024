@@ -37,7 +37,7 @@ export default function HeroScene({ width, height, part, bg }: { width: number; 
   const c = SKY[part];
   const night = part === 'night';
   return (
-    <Svg width={width} height={height} viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+    <Svg width={width || "100%"} height={height} viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
       <Defs>
         <LinearGradient id={`sky-${part}`} x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor={c.top} />

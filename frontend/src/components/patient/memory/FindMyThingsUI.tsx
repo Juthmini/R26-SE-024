@@ -9,7 +9,7 @@ import {
   AI_URL, CameraSource, getPatientId, getPatientName, loadCameraSource, saveCameraSource, speak,
 } from '../../../services/memoryAI';
 import {
-  Esp32Art, FamilyArt, MapArt, PeopleArt, PhoneCamArt, QuizArt, RememberArt, RoomCamArt, StoryArt, VoiceArt,
+  Esp32Art, FamilyArt, MapArt, PeopleArt, PhoneCamArt, QuizArt, ReminderArt, RememberArt, RoomCamArt, StoryArt, TalkArt, VoiceArt,
 } from './findThings/Illustrations';
 import HeroScene, { dayPart } from './findThings/HeroScene';
 import Esp32ConnectSheet, { roomSi } from './findThings/Esp32ConnectSheet';
@@ -36,6 +36,10 @@ const CARDS: Card[] = [
     route: '/patient/things-map', Art: MapArt, bg: '#f0fdf4', accent: '#16a34a' },
   { key: 'people', si: 'මට හමුවූ අය', en: 'People I met', hint: 'පවුලේ අය සහ යාළුවෝ',
     route: '/patient/people-met', Art: PeopleArt, bg: '#fff7ed', accent: '#ea580c' },
+  { key: 'remind', si: 'මතක් කිරීම්', en: 'Reminders', hint: 'බෙහෙත්, තේ, එන අය',
+    route: '/patient/reminders', Art: ReminderArt, bg: '#FFFBEB', accent: '#B45309' },
+  { key: 'talk', si: 'කතාබහ', en: 'Visit conversations', hint: 'පවුලේ අය කතා කරපු දේ',
+    route: '/patient/conversations', Art: TalkArt, bg: '#ECFDF8', accent: '#0F9D8A' },
   { key: 'story', si: 'අද මතක කතාව', en: 'Memory story', hint: 'ඔබේ දවසේ ලස්සන කතාව',
     route: '/patient/memory-story', Art: StoryArt, bg: '#fdf2f8', accent: '#db2777' },
   { key: 'quiz', si: 'මතක සෙල්ලම', en: 'Memory game', hint: '🦉 අද දවස ගැන පොඩි කතාබහක්',
@@ -55,6 +59,8 @@ export default function FindMyThingsScreen() {
   const [espOnline, setEspOnline] = useState<boolean | null>(null);
   const [passive, setPassive] = useState<{ running: boolean; fps?: number; state?: string; events?: { kind: string; text: string; time: string }[] }>({ running: false });
   const [passiveBusy, setPassiveBusy] = useState(false);
+  const [quiz, setQuiz] = useState<{ ready: boolean; count: number; played: boolean } | null>(null);
+  const [due, setDue] = useState<{ id: string; say_si: string }[]>([]);
 
   // While the ESP32 is the chosen camera, show what the server's passive
   // worker is doing (it keeps running even when this screen is closed).
@@ -113,6 +119,12 @@ export default function FindMyThingsScreen() {
             axios.get(`${AI_URL}/people/${pid}`, { timeout: 8000 }),
           ]);
           setCounts({ things: t.data.items?.length || 0, people: p.data.people?.length || 0 });
+          axios.get(`${AI_URL}/quiz/today/${pid}`, { timeout: 8000 }).then((q) => setQuiz(q.data)).catch(() => {});
+          axios.get(`${AI_URL}/reminders/due/${pid}`, { timeout: 8000 }).then((r) => {
+            const list = r.data.due || [];
+            setDue(list);
+            if (list.length) speak(list[0].say_si);
+          }).catch(() => {});
         } catch {
           // Counts are decoration only; the menu still works offline.
         }
@@ -196,6 +208,16 @@ export default function FindMyThingsScreen() {
         </View>
 
         <View style={s.body}>
+          {due.map((d) => (
+            <TouchableOpacity key={d.id} style={s.dueCard} onPress={() => speak(d.say_si)} activeOpacity={0.85}>
+              <Text style={{ fontSize: 26 }}>⏰</Text>
+              <Text style={s.dueText}>{d.say_si}</Text>
+              <TouchableOpacity onPress={() => setDue((x) => x.filter((y) => y.id !== d.id))} hitSlop={10}>
+                <Ionicons name="close" size={20} color="#92400E" />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
+
           {/* ── Camera ───────────────────────────────────────── */}
           <Text style={s.section}>කැමරාව</Text>
           <View style={s.camRow}>
@@ -205,7 +227,7 @@ export default function FindMyThingsScreen() {
                 <Text style={s.camText}>ෆෝන් එක</Text>
                 <Text style={s.camSub}>Phone camera</Text>
               </View>
-              {cam.source === 'phone' && <Ionicons name="checkmark-circle" size={22} color={ACCENT} />}
+              {cam.source === 'phone' && <Ionicons name="checkmark-circle" size={20} color={ACCENT} style={s.camCheck} />}
             </TouchableOpacity>
             <TouchableOpacity style={[s.camOpt, cam.source === 'esp32' && s.camOptOn]} onPress={() => setEspModal(true)} activeOpacity={0.85}>
               <View style={s.camTile}><Esp32Art size={40} /></View>
@@ -228,7 +250,7 @@ export default function FindMyThingsScreen() {
           {cam.source === 'esp32' && !!cam.esp32Ip && (
             <View style={s.passiveCard}>
               <View style={s.passiveHead}>
-                <Ionicons name="radio" size={22} color={passive.running ? '#4ade80' : '#94a3b8'} />
+                <Ionicons name="radio" size={22} color={passive.running ? '#16a34a' : '#94a3b8'} />
                 <View style={{ flex: 1 }}>
                   <Text style={s.passiveTitle}>දවස පුරා තනියම බලන්න</Text>
                   <Text style={s.passiveSub}>
@@ -238,7 +260,7 @@ export default function FindMyThingsScreen() {
                   </Text>
                 </View>
                 <Switch value={!!passive.running} onValueChange={togglePassive} disabled={passiveBusy}
-                  trackColor={{ true: ACCENT, false: '#334155' }} />
+                  trackColor={{ true: ACCENT, false: '#CBD5E1' }} />
               </View>
               {passive.running && (passive.events || []).slice(0, 3).map((e, i) => (
                 <Text key={`${e.time}-${i}`} style={s.passiveEvent} numberOfLines={2}>• {e.text}</Text>
@@ -256,6 +278,13 @@ export default function FindMyThingsScreen() {
                 </View>
                 <Text style={s.cardSi} numberOfLines={2}>{si}</Text>
                 <Text style={s.cardEn} numberOfLines={1}>{en}</Text>
+                {key === 'quiz' && quiz && (quiz.played || quiz.ready) && (
+                  <View style={[s.badge, quiz.played && { backgroundColor: '#DCFCE7' }]}>
+                    <Text style={[s.badgeText, quiz.played && { color: '#15803D' }]}>
+                      {quiz.played ? '✓ අද කළා' : `ප්‍රශ්න ${quiz.count}ක් සූදානම්`}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -272,9 +301,12 @@ export default function FindMyThingsScreen() {
   );
 }
 
-const BG = '#13251F';      // deep evergreen page
-const CARD = '#1D2B3A';    // slate-navy cards
-const ACCENT = '#2DD4BF';
+const BG = '#F4F7F5';      // soft white page
+const CARD = '#FFFFFF';
+const INK = '#0F2A24';
+const MUTED = '#64748B';
+const LINE = '#E3EAE7';
+const ACCENT = '#0F9D8A';
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
@@ -295,30 +327,37 @@ const s = StyleSheet.create({
   glassChipNum: { color: '#fff', fontSize: 15, fontWeight: '900' },
 
   body: { paddingHorizontal: 20, marginTop: 6 },
-  section: { fontSize: 21, fontWeight: '900', color: '#F1F5F9', marginBottom: 14, marginTop: 10 },
+  section: { fontSize: 21, fontWeight: '900', color: INK, marginBottom: 14, marginTop: 10 },
 
   camRow: { flexDirection: 'row', gap: 12, marginBottom: 14 },
   camOpt: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: CARD, borderRadius: 22,
-    padding: 12, borderWidth: 2, borderColor: 'transparent' },
+    padding: 12, borderWidth: 2, borderColor: LINE },
   camOptOn: { borderColor: ACCENT },
-  camTile: { width: 52, height: 52, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  camText: { fontSize: 16, fontWeight: '800', color: '#fff' },
-  camSub: { fontSize: 11.5, color: '#94A3B8', fontWeight: '600' },
+  camCheck: { position: 'absolute', top: 6, right: 6 },
+  camTile: { width: 52, height: 52, borderRadius: 16, backgroundColor: '#F1F5F4', alignItems: 'center', justifyContent: 'center' },
+  camText: { fontSize: 16, fontWeight: '800', color: INK },
+  camSub: { fontSize: 11.5, color: MUTED, fontWeight: '600' },
   espStatus: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
 
   passiveCard: { backgroundColor: CARD, borderRadius: 22, padding: 14, marginBottom: 10, gap: 6,
-    borderWidth: 1, borderColor: 'rgba(45,212,191,0.35)' },
+    borderWidth: 1, borderColor: '#BFE6DE' },
   passiveHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  passiveTitle: { fontSize: 16, fontWeight: '900', color: '#fff' },
-  passiveSub: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
-  passiveEvent: { fontSize: 13, color: '#CBD5E1' },
+  passiveTitle: { fontSize: 16, fontWeight: '900', color: INK },
+  passiveSub: { fontSize: 12, color: MUTED, fontWeight: '600' },
+  passiveEvent: { fontSize: 13, color: '#334155' },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 16 },
   card: { width: '48%', backgroundColor: CARD, borderRadius: 28, paddingTop: 18, paddingBottom: 18, paddingHorizontal: 10,
-    alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+    alignItems: 'center', borderWidth: 1, borderColor: LINE,
+    shadowColor: INK, shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   tile: { width: 118, height: 118, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 4, borderColor: '#fff', overflow: 'hidden' },
-  cardSi: { color: '#fff', fontSize: 17, fontWeight: '800', textAlign: 'center', marginTop: 14, lineHeight: 24 },
-  cardEn: { color: '#94A3B8', fontSize: 12, fontWeight: '600', marginTop: 2 },
+    overflow: 'hidden' },
+  cardSi: { color: INK, fontSize: 17, fontWeight: '800', textAlign: 'center', marginTop: 14, lineHeight: 24 },
+  dueCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FEF3C7', borderRadius: 20, padding: 14,
+    marginTop: 8, borderWidth: 1, borderColor: '#FCD34D' },
+  dueText: { flex: 1, fontSize: 15, lineHeight: 22, color: '#78350F', fontWeight: '700' },
+  badge: { position: 'absolute', top: 10, right: 10, backgroundColor: '#FEF3C7', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeText: { fontSize: 11, fontWeight: '800', color: '#B45309' },
+  cardEn: { color: MUTED, fontSize: 12, fontWeight: '600', marginTop: 2 },
 });

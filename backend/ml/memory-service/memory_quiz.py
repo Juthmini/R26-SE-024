@@ -46,6 +46,8 @@ NODE_API = os.environ.get("NODE_API_URL", "http://127.0.0.1:5000")
 
 SESSIONS = {}   # pid -> [session]
 PROFILE = {}    # pid -> {name, user_id, updated}
+OBJECT_INFO = {}  # label -> what an object is for (learned once by the LLM for objects not in OBJECT_USE)
+PREPARED = {}   # pid -> {day, questions, level, avg} - tonight's game, generated at STORY_HOUR
 _lock = threading.Lock()
 
 POINTS = {"free": 3, "hint": 2, "choice": 1}
@@ -63,13 +65,15 @@ DOMAINS = {
 
 
 def _load():
-    global SESSIONS, PROFILE
+    global SESSIONS, PROFILE, OBJECT_INFO, PREPARED
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
             SESSIONS = data.get("SESSIONS", {})
             PROFILE = data.get("PROFILE", {})
+            OBJECT_INFO = data.get("OBJECT_INFO", {})
+            PREPARED = data.get("PREPARED", {})
         except Exception as e:
             print("memory_quiz_db load failed:", e)
 
@@ -77,7 +81,8 @@ def _load():
 def _save():
     with _lock:
         with open(DB_FILE, "w", encoding="utf-8") as f:
-            json.dump({"SESSIONS": SESSIONS, "PROFILE": PROFILE}, f, ensure_ascii=False)
+            json.dump({"SESSIONS": SESSIONS, "PROFILE": PROFILE, "OBJECT_INFO": OBJECT_INFO, "PREPARED": PREPARED},
+                      f, ensure_ascii=False)
 
 
 _load()
@@ -409,23 +414,29 @@ def q_time_of_day(pid, m, obj, day):
 def q_talk(pid, conv, item, day):
     """About what a visitor talked about (summary made with consent, visit_talk.py)."""
     p = next((x for x in rm.PEOPLE.get(pid, []) if x["id"] == conv["person_id"]), None)
-    if not p or not item.get("question_si") or not item.get("answer_si"):
+    if not item.get("question_si") or not item.get("answer_si"):
         return None
     dsi, den = _day_word(day)
-    label_si, label_en, _ = _person_label(p)
-    correct = {"si": item["answer_si"], "en": item.get("answer_en", ""), "icon": "💬"}
+    if p:
+        label_si, label_en, _ = _person_label(p)
+    else:  # a visitor who is not registered (caregiver allowed all visitors)
+        p, label_si, label_en = {}, "ඔයාව බලන්න ආපු අමුත්තා", "your visitor"
+    # Plain sentence choices (shown as a list) - the same icon on every tile helped nobody.
+    correct = {"si": item["answer_si"].rstrip("."), "en": item.get("answer_en", "")}
     wrong_si, wrong_en = item.get("wrong_si") or [], item.get("wrong_en") or []
-    pool = [{"si": w, "en": wrong_en[i] if i < len(wrong_en) else "", "icon": "💬"} for i, w in enumerate(wrong_si) if w]
+    pool = [{"si": w.rstrip("."), "en": wrong_en[i] if i < len(wrong_en) else ""} for i, w in enumerate(wrong_si) if w]
     if not pool:
         return None
     choices, idx = _choices(correct, pool, k=3)
     accept = [item["answer_si"], item.get("answer_en", "")] + [t.get("si", "") for t in conv.get("topics", [])[:1]]
-    return _q("talk", "conversation" if dsi == "අද" else "delayed",
-              f"{dsi} {label_si} ඔයා එක්ක කතා කළා. {item['question_si']}",
-              f"{label_en.capitalize()} talked with you {den}. {item.get('question_en', '')}",
-              correct, accept, item.get("hint_si") or "කතා කරපු වෙලාව මතක් කරලා බලන්න.", "Hint about the talk.",
-              choices, idx, f"ඔව්, {conv['summary_si']}" if conv.get("summary_si") else f"ඒ {item['answer_si']}.",
-              {"kind": "photo", "urls": [p["photo_url"]]} if p.get("photo_url") else {"kind": "visit"}, day)
+    q = _q("talk", "conversation" if dsi == "අද" else "delayed",
+           item["question_si"], item.get("question_en", ""),
+           correct, accept, item.get("hint_si") or "කතා කරපු වෙලාව මතක් කරලා බලන්න.", "Hint about the talk.",
+           choices, idx, f"ඒ {item['answer_si']}.",
+           {"kind": "photo", "urls": [p["photo_url"]]} if p.get("photo_url") else {"kind": "visit"}, day)
+    # Asked one after another; the first one of a talk introduces it (see _add_leads).
+    q["talk_id"], q["talk_intro_si"] = conv["id"], f"{dsi} {label_si} ඔයා එක්ක කතා කළා. ඒ කතාව ගැන අහන්නම්."
+    return q
 
 
 def q_which_first(pid, a, b, day):
@@ -465,6 +476,132 @@ def _events_today(pid, day, photos):
     return ev
 
 
+# ─── Practical questions: what each thing is FOR ────────────────────────────
+# "You spent a while near something" is not useful to a patient. What matters
+# in daily life is: did I take my medicine / drink tea / brush my teeth, and
+# where are the things I need right now. Each object therefore carries what it
+# is used for. Common objects are listed here; anything new the camera saves is
+# looked up once by the LLM (learn_object) and remembered.
+#   use_si      what it is for                  ("තේ, කෝපි බොන්න")
+#   did_si      the daily activity it proves     ("තේ බිව්වේ")  -> "when did you ...?"
+#   need        True = a thing people misplace   -> "where is your ... now?"
+OBJECT_USE = {
+    "cup":            {"use_si": "තේ, කෝපි බොන්න", "use_en": "drinking tea or coffee", "did_si": "තේ බිව්වේ", "did_en": "have your tea"},
+    "pill bottle":    {"use_si": "බෙහෙත් බොන්න", "use_en": "taking medicine", "did_si": "බෙහෙත් බිව්වේ", "did_en": "take your medicine", "need": True},
+    "toothbrush":     {"use_si": "දත් මදින්න", "use_en": "brushing teeth", "did_si": "දත් මැද්දේ", "did_en": "brush your teeth"},
+    "bottle":         {"use_si": "වතුර බොන්න", "use_en": "drinking water", "did_si": "වතුර බිව්වේ", "did_en": "drink water"},
+    "drinking glass": {"use_si": "වතුර බොන්න", "use_en": "drinking water", "did_si": "වතුර බිව්වේ", "did_en": "drink water"},
+    "bowl":           {"use_si": "කෑම කන්න", "use_en": "eating", "did_si": "කෑම කෑවේ", "did_en": "eat"},
+    "spoon":          {"use_si": "කෑම කන්න", "use_en": "eating", "did_si": "කෑම කෑවේ", "did_en": "eat"},
+    "book":           {"use_si": "කියවන්න", "use_en": "reading", "did_si": "පොත කියෙව්වේ", "did_en": "read"},
+    "remote":         {"use_si": "ටීවී බලන්න", "use_en": "watching TV", "did_si": "ටීවී බැලුවේ", "did_en": "watch TV", "need": True},
+    "glasses":        {"use_si": "හොඳට බලන්න, කියවන්න", "use_en": "seeing clearly", "need": True},
+    "cell phone":     {"use_si": "කෝල් ගන්න", "use_en": "calling family", "need": True},
+    "wallet":         {"use_si": "සල්ලි තියාගන්න", "use_en": "keeping money", "need": True},
+    "keys":           {"use_si": "දොර අරින්න", "use_en": "opening the door", "need": True},
+    "watch":          {"use_si": "වෙලාව බලන්න", "use_en": "telling the time", "need": True},
+    "hearing aid":    {"use_si": "හොඳට අහන්න", "use_en": "hearing", "need": True},
+    "umbrella":       {"use_si": "වැස්සට යන්න", "use_en": "going out in rain", "need": True},
+    "handbag":        {"use_si": "බඩු දාගෙන යන්න", "use_en": "carrying things", "need": True},
+    "laptop":         {"use_si": "වැඩ කරන්න, වීඩියෝ බලන්න", "use_en": "work and videos"},
+    "scissors":       {"use_si": "කපන්න", "use_en": "cutting", "need": True},
+}
+
+
+def object_use(label):
+    return OBJECT_USE.get(label) or OBJECT_INFO.get(label)
+
+
+def learn_object(label):
+    """First time a new kind of object is saved: ask the LLM what it is for, once."""
+    if label in OBJECT_USE or label in OBJECT_INFO or label in rm.FIXED_ANCHORS or not rm.GROQ_API_KEY:
+        return
+    try:
+        out = rm.no_hindi(rm._llm_json(
+            f"An elderly Sri Lankan person with dementia has a '{label}' ({rm.si_name(label)}) at home. "
+            "In very simple spoken Sinhala, what is it used for, and which daily activity does using it show? "
+            'Reply ONLY JSON {"use_si": "short purpose, e.g. තේ බොන්න", "use_en": "...", '
+            '"did_si": "past-tense activity for the question \'ඔයා අද ___ කීයටද?\', e.g. තේ බිව්වේ, or empty if none", '
+            '"did_en": "...", "need": true/false (true if people often misplace it and need to find it)}'))
+        if out.get("use_si"):
+            OBJECT_INFO[label] = {k: out[k] for k in ("use_si", "use_en", "did_si", "did_en", "need") if out.get(k) not in (None, "")}
+            _save()
+    except Exception as e:
+        print("learn_object failed:", e)
+
+
+def _latest_sighting(pid, label):
+    return rm.LAST_SEEN.get(pid, {}).get(label)
+
+
+def q_where_now(pid, obj_label, day, photos):
+    """'Where is your glasses now?' - from the newest sighting (practical: finding it)."""
+    seen = _latest_sighting(pid, obj_label)
+    use = object_use(obj_label) or {}
+    if not seen or not seen.get("room_si"):
+        return None
+    name = rm.si_name(obj_label)
+    correct = {"si": seen["room_si"], "en": seen["room"], "icon": ROOM_ICON.get(seen["room"], "🏠")}
+    choices, idx = _choices(correct, _rooms(), k=4)
+    need = f" {use['use_si']} ඕනේ වුණාම එතනින් ගන්න." if use.get("use_si") else ""
+    hint = f"ඒක {rm.si_name(seen['anchors'][0])} ළඟ තිබ්බේ." if seen.get("anchors") else "ඔයා ඒක අන්තිමට පාවිච්චි කරපු තැන හිතන්න."
+    return _q("where_now", "places", f"ඔයාගේ {name} දැන් තියෙන්නේ ගෙදර කොයි කාමරේද?",
+              f"Where is your {obj_label} now?", correct, [seen["room_si"], seen["room"], seen["room"].lower()],
+              hint, "Hint: what it is near.", choices, idx,
+              f"ඔයාගේ {name} තියෙන්නේ {seen['room_si']}ේ.{need}",
+              {"kind": "photo", "urls": [photos.get(obj_label) or seen.get("photo_url")]}, day)
+
+
+def q_did_when(pid, m, obj, day):
+    """'When did you take your medicine today?' - the camera saw the pill bottle in use."""
+    use = object_use(obj["label"]) or {}
+    if not use.get("did_si"):
+        return None
+    correct = _periods()[_period(m["time"])]
+    choices, idx = _choices(correct, _periods(), k=4)
+    where = f"ඒ වෙලාවේ ඔයා හිටියේ {m['room_si']}ේ." if m.get("room_si") else f"ඔයා ඒකට {obj['label_si']} පාවිච්චි කළා."
+    return _q("did_when", "time", f"ඔයා අද {use['did_si']} කීයටද? උදේද, දවල්ද, හවසද, රෑද?",
+              f"When did you {use.get('did_en', 'use it')} today?", correct, [correct["si"], correct["en"]],
+              where, "Hint: where you were.", choices, idx,
+              f"ඔයා අද {use['did_si']} {correct['si']}. කැමරාවෙන් මම දැක්කා.",
+              {"kind": "photo", "urls": [_crop(obj.get("photo_url") or m["photo_urls"][0], obj.get("box"))]}, day)
+
+
+def q_used_for(pid, obj_label, day, photos):
+    """'What do we use this for?' - knowing what everyday objects are for (semantic memory)."""
+    use = object_use(obj_label)
+    if not use or not photos.get(obj_label):
+        return None
+    correct = {"si": use["use_si"], "en": use.get("use_en", "")}
+    pool = [{"si": u["use_si"], "en": u.get("use_en", "")} for l, u in {**OBJECT_USE, **OBJECT_INFO}.items()
+            if l != obj_label and u["use_si"] != use["use_si"]]
+    choices, idx = _choices(correct, pool, k=3)
+    dsi, _ = _day_word(day)
+    return _q("used_for", "objects", f"මේ ඔයා {dsi} පාවිච්චි කරපු {rm.si_name(obj_label)}. මේක අපි පාවිච්චි කරන්නේ මොකටද?",
+              f"This is your {obj_label}. What do we use it for?", correct,
+              [use["use_si"], use.get("use_en", "")] + use["use_si"].replace(",", " ").split(),
+              "ඔයා අද ඒක පාවිච්චි කරපු වෙලාව මතක් කරලා බලන්න.", "Hint: when you used it.", choices, idx,
+              f"ඔව්, {rm.si_name(obj_label)} පාවිච්චි කරන්නේ {use['use_si']}.",
+              {"kind": "photo", "urls": [photos[obj_label]]}, day)
+
+
+def q_which_for(pid, m, obj, day, photos):
+    """'What did you drink your tea from today?' - pick the real object photo."""
+    use = object_use(obj["label"]) or {}
+    others = [l for l in photos if l != obj["label"] and (object_use(l) or {}).get("use_si") != use.get("use_si")]
+    if not use.get("did_si") or len(others) < 2:
+        return None
+    correct = {"si": obj["label_si"], "en": obj["label"],
+               "image": _crop(obj.get("photo_url") or m["photo_urls"][0], obj.get("box"))}
+    choices, idx = _choices(correct, [{"si": rm.si_name(l), "en": l, "image": photos[l]} for l in others], k=4)
+    return _q("which_for", "objects", f"ඔයා අද {use['did_si']} මොකෙන්ද? මේ පින්තූර වලින් තෝරන්න නැත්නම් කියන්න.",
+              f"What did you use to {use.get('did_en', 'do it')} today?", correct,
+              [obj["label_si"], obj["label"]] + [w for w, l in rm.SPOKEN_TO_LABEL.items() if l == obj["label"]],
+              f"ඒක {use['use_si']} පාවිච්චි කරන දෙයක්.", "Hint: what it is for.", choices, idx,
+              f"ඒ ඔයාගේ {obj['label_si']}.", {"kind": "scene",
+              "icon": ROOM_ICON.get(m.get("room") or "", "🏠"), "label_si": m.get("room_si") or ""}, day)
+
+
 # ─── Adaptive selection ──────────────────────────────────────────────────────
 def _finished(pid):
     return [s for s in SESSIONS.get(pid, []) if s.get("finished")]
@@ -502,9 +639,10 @@ def _missed_targets(pid):
 
 def build_questions(pid):
     level, avg = _level(pid)
-    n_target = {"gentle": 4, "normal": 5, "challenge": 6}[level]
-    today = datetime.date.today()
-    days = [(today - datetime.timedelta(days=i)).isoformat() for i in range(0, 3 if level == "challenge" else 2)]
+    n_target = {"gentle": 5, "normal": 6, "challenge": 6}[level]
+    # Only TODAY's events: every night brings a new set of questions, and what was
+    # asked today is never asked again tomorrow.
+    day = datetime.date.today().isoformat()
     photos = _object_photos(pid)
 
     # Each candidate carries a "target" (the person / thing it is about), so two
@@ -514,78 +652,103 @@ def build_questions(pid):
         q["target"] = target
         cands.append(q)
 
-    for di, day in enumerate(days):
-        met = sorted(_people_met(pid, day), key=lambda m: -m[1].get("seconds", 0))
-        for p, rec in met:
-            add(q_who_came(pid, p, rec, day), f"person:{p['id']}")
-            if p.get("photo_url"):
-                add(q_person_photo(pid, p, rec, day), f"person:{p['id']}")
-            if di == 0 and rec.get("first"):
-                add(q_visit_time(pid, p, rec, day), f"person:{p['id']}")
-        if di == 0 and len(met) >= 2:
-            add(q_visit_count(pid, met, day), f"count:{day}")
-        for conv in visit_talk.for_day(pid, day):
-            for i, item in enumerate(conv.get("questions") or []):
-                q = q_talk(pid, conv, item, day)
+    met = sorted(_people_met(pid, day), key=lambda m: -m[1].get("seconds", 0))
+    for p, rec in met:
+        add(q_who_came(pid, p, rec, day), f"person:{p['id']}")
+        if p.get("photo_url"):
+            add(q_person_photo(pid, p, rec, day), f"person:{p['id']}")
+        if rec.get("first"):
+            add(q_visit_time(pid, p, rec, day), f"person:{p['id']}")
+    if len(met) >= 2:
+        add(q_visit_count(pid, met, day), f"count:{day}")
+    talk_qs = []  # what was said during visits - every question is kept, asked one by one
+    for conv in visit_talk.for_day(pid, day):
+        for i, item in enumerate(conv.get("questions") or []):
+            q = q_talk(pid, conv, item, day)
+            if q:
+                q["target"] = f"talk:{conv['id']}:{i}"
+                talk_qs.append(q)
+    moments = [m for m in rm.MOMENTS.get(pid, []) if m["time"].startswith(day)]
+    seen_obj = set()
+    for m in reversed(moments):
+        objs = [o for o in m["objects"] if o["label"] not in rm.FIXED_ANCHORS]
+        for o in objs:
+            if o["label"] in seen_obj:
+                continue
+            seen_obj.add(o["label"])
+            # Practical: did you take your medicine / when, where is it now,
+            # what do we use it for, what did you drink your tea from.
+            for q in (q_did_when(pid, m, o, day),
+                      q_where_now(pid, o["label"], day, photos) if (object_use(o["label"]) or {}).get("need") else None,
+                      q_which_for(pid, m, o, day, photos),
+                      q_used_for(pid, o["label"], day, photos)):
                 if q:
-                    add(q, f"talk:{conv['id']}:{i}")
-        moments = [m for m in rm.MOMENTS.get(pid, []) if m["time"].startswith(day)]
-        seen_obj = set()
-        for m in reversed(moments):
-            objs = [o for o in m["objects"] if o["label"] not in rm.FIXED_ANCHORS]
-            for o in objs:
-                if o["label"] in seen_obj:
-                    continue
-                seen_obj.add(o["label"])
-                add(q_which_object(pid, m, o, day, photos), f"object:{o['label']}")
-                if m.get("room_si"):
-                    add(q_object_place(pid, m, o, day), f"object:{o['label']}")
-                if di == 0:
-                    add(q_reveal(pid, m, o, day), f"object:{o['label']}")
-                    add(q_time_of_day(pid, m, o, day), f"object:{o['label']}")
-            if len(m.get("photo_urls", [])) >= 2 and objs and m.get("room_si"):
-                add(q_replay(pid, m, day), f"object:{objs[0]['label']}")
-        if di == 0:
-            ev = _events_today(pid, day, photos)
-            pairs = [(a, b) for i, a in enumerate(ev) for b in ev[i + 1:]
-                     if a["target"] != b["target"] and
-                     (datetime.datetime.fromisoformat(b["time"]) - datetime.datetime.fromisoformat(a["time"])).total_seconds() >= 1200]
-            if pairs:
-                a, b = random.choice(pairs)
-                add(q_which_first(pid, a, b, day), f"order:{a['target']}|{b['target']}")
+                    add(q, f"object:{o['label']}")
+            filler = q_object_place(pid, m, o, day) if m.get("room_si") else None
+            if filler:  # only if the practical ones run out
+                filler["filler"] = True
+                add(filler, f"object:{o['label']}")
+        if len(m.get("photo_urls", [])) >= 2 and objs and m.get("room_si"):
+            q = q_replay(pid, m, day)
+            q["filler"] = True
+            add(q, f"object:{objs[0]['label']}")
+    ev = _events_today(pid, day, photos)
+    pairs = [(a, b) for i, a in enumerate(ev) for b in ev[i + 1:]
+             if a["target"] != b["target"] and
+             (datetime.datetime.fromisoformat(b["time"]) - datetime.datetime.fromisoformat(a["time"])).total_seconds() >= 1200]
+    if pairs:
+        a, b = random.choice(pairs)
+        add(q_which_first(pid, a, b, day), f"order:{a['target']}|{b['target']}")
 
-    if not cands:
+    if not cands and not talk_qs:
         return [], level, avg
 
-    # Adaptive order: things forgotten last time first (spaced retrieval), then
-    # the weakest memory areas, keeping variety (one per type and per target).
-    missed = _missed_targets(pid)
+    # Adaptive: the weakest memory areas first, keeping variety (one per type and
+    # per target, then at most two of a type). Conversation questions are all kept.
     weak = _domain_scores(_finished(pid)[-10:])
     random.shuffle(cands)
-    cands.sort(key=lambda q: (q["target"] not in missed, q["day"] != days[0], weak.get(q["domain"], 50)))
+    cands.sort(key=lambda q: (bool(q.get("filler")), weak.get(q["domain"], 50)))
     picked, used_targets, type_count = [], set(), {}
-    for max_per_type in (1, 2):  # variety first; at most two of any kind
+    room = max(2, n_target - len(talk_qs))
+    for max_per_type in (1, 2):
         for q in cands:
-            if len(picked) >= n_target:
+            if len(picked) >= room:
                 break
             if q in picked or q["target"] in used_targets or type_count.get(q["type"], 0) >= max_per_type:
                 continue
             picked.append(q)
             type_count[q["type"]] = type_count.get(q["type"], 0) + 1
             used_targets.add(q["target"])
-    for q in picked:
-        if q["target"] in missed:
-            q["retry"] = True
-            q["prompt_si"] = "අපි කලින් මේ ගැන කතා කළා, ආයෙත් බලමු! " + q["prompt_si"]
-    # The day's main event (a visit, then what was talked about) opens the game;
-    # the fun reveal game closes it.
-    picked.sort(key=lambda q: (0 if q["type"] == "who_came" and q["domain"] == "people" else
-                               1 if q["type"] == "talk" else 2, q["type"] == "reveal"))
-    return picked, level, avg
+    # Order like a conversation: who came -> what we talked about -> my things.
+    visit_first = [q for q in picked if q["type"] in ("who_came", "person_photo", "visit_time", "visit_count")]
+    rest = [q for q in picked if q not in visit_first]
+    rest.sort(key=lambda q: bool(q.get("filler")))
+    ordered = visit_first[:1] + talk_qs[:8] + visit_first[1:] + rest
+    _add_leads(ordered)
+    return ordered, level, avg
+
+
+def _add_leads(qs):
+    """A short spoken bridge before each question, so the game flows like a
+    conversation instead of a list of questions."""
+    talk_seen, objects_started = set(), False
+    for i, q in enumerate(qs):
+        lead = ""
+        if q["type"] == "talk":
+            lead = q["talk_intro_si"] if q["talk_id"] not in talk_seen else "ඒ කතාව ගැනම තව එකක්."
+            talk_seen.add(q["talk_id"])
+        elif i == 0 and q["type"] == "who_came":
+            lead = "මුලින්ම, අද දවසේ වැදගත්ම දේ ගැන."
+        elif q["domain"] in ("objects", "places", "time") and not objects_started:
+            objects_started = True
+            lead = "දැන් ඔයාගේ බඩු ගැනයි, අද කරපු දේවල් ගැනයි කතා කරමු." if i else ""
+        if i == len(qs) - 1 and len(qs) > 2:
+            lead = (lead + " " if lead else "") + "මේ අන්තිම ප්‍රශ්නය!"
+        q["lead_si"] = lead.strip()
 
 
 def _public(q):
-    return {k: q.get(k) for k in ("id", "type", "domain", "prompt_si", "prompt_en", "hint_si", "choices", "media", "retry")}
+    return {k: q.get(k) for k in ("id", "type", "domain", "lead_si", "prompt_si", "prompt_en", "hint_si", "choices", "media")}
 
 
 # ─── Judging spoken answers ──────────────────────────────────────────────────
@@ -654,19 +817,22 @@ async def quiz_start(patient_id: str = Form(...), user_id: str = Form(""), name:
         prof["user_id"] = user_id
     prof["updated"] = datetime.datetime.now().isoformat()
 
-    questions, level, avg = build_questions(patient_id)
+    # Tonight's game was prepared at STORY_HOUR (see _nightly_quiz_loop); played
+    # earlier in the day, or a second time, it is built fresh from what is known now.
+    prep = PREPARED.pop(patient_id, None)
+    if prep and prep["day"] == rm._today() and prep["questions"]:
+        questions, level, avg = prep["questions"], prep["level"], prep["avg"]
+    else:
+        questions, level, avg = build_questions(patient_id)
     who = f"{name}, " if name else ""
     if not questions:
         # No made-up questions: with nothing captured, there is nothing to ask about.
         _save()
         return {"status": "empty", "say_si": f"{who}අද තවම ඔයාගේ දවසේ මතක සටහන් නැහැ. කැමරාව ඔයාගේ දවස "
                                               "දැක්කට පස්සේ, රෑට අපි ඒ ගැන සෙල්ලම් කරමු."}
-    story = rm.STORIES.get(patient_id, {}).get(rm._today(), {}).get("si")
-    if story:
-        intro = f"{who}අද ඔයාගේ දවසේ කතාව අපි ඇහුවා. දැන් ඒ කතාව ගැන පොඩි මතක සෙල්ලමක් කරමු!"
-    else:
-        intro = f"{who}අද ඔයාගේ දවස ගැන පොඩි මතක සෙල්ලමක් කරමු!"
-    intro += f" මම ප්‍රශ්න {len(questions)}ක් අහන්නම්. උත්තරේ කියන්න මයික් බොත්තම ඔබන්න."
+    # A warm start before any question: greet, then ask how they feel (check-in).
+    intro = f"ආයුබෝවන් {name}! " if name else "ආයුබෝවන්! "
+    intro += "ඔයාව දකින්න ලැබුණු එක මට හරිම සතුටුයි. අපි ටිකක් කතා කරමු. අද ඔයාට කොහොමද දැනුණේ?"
 
     session = {"id": f"qz-{uuid.uuid4().hex[:8]}", "pid": patient_id, "created": datetime.datetime.now().isoformat(),
                "day": rm._today(), "level": level, "recent_avg": avg, "questions": questions,
@@ -675,7 +841,71 @@ async def quiz_start(patient_id: str = Form(...), user_id: str = Form(""), name:
     SESSIONS[patient_id] = SESSIONS[patient_id][-400:]
     _save()
     return {"status": "success", "session_id": session["id"], "level": level, "intro_si": intro,
-            "questions": [_public(q) for q in questions]}
+            "moods": MOODS, "questions": [_public(q) for q in questions]}
+
+
+# The check-in: how the patient feels sets the tone (and length) of tonight's game.
+MOODS = [{"key": "happy", "emoji": "😊", "si": "සතුටින්"}, {"key": "ok", "emoji": "🙂", "si": "හොඳින්"},
+         {"key": "tired", "emoji": "😴", "si": "මහන්සියි"}, {"key": "sad", "emoji": "😢", "si": "දුකෙන්"}]
+MOOD_REPLY = {
+    "happy": "ඒක අහන්න මට හරිම සතුටුයි! එහෙනම් අද දවස ගැන සතුටින් මතක් කරමු.",
+    "ok": "හොඳයි! අපි එකට අද දවස මතක් කරමු.",
+    "tired": "අනේ, ඔයා මහන්සියි නේද? කමක් නැහැ, අපි ප්‍රශ්න ටිකයි අහන්නේ, හෙමින් කරමු.",
+    "sad": "අනේ, ඔයාට දුකද? මම ඔයා ළඟ ඉන්නවා. අපි හෙමින්, ප්‍රශ්න ටිකක් විතරක් කරමු.",
+}
+
+
+@router.post("/quiz/mood")
+async def quiz_mood(session_id: str = Form(...), mood: str = Form(...)):
+    s = _find_session(session_id)
+    if not s:
+        return {"status": "error", "message": "Quiz session not found"}
+    mood = mood if mood in MOOD_REPLY else "ok"
+    s["mood"] = mood
+    # Tired or sad -> a shorter game today; unasked questions don't count against the score.
+    limit = 4 if mood in ("tired", "sad") else len(s["questions"])
+    if limit < len(s["questions"]):
+        s["questions"] = s["questions"][:limit]
+        _add_leads(s["questions"])
+    _save()
+    n = len(s["questions"])
+    return {"status": "success", "say_si": f"{MOOD_REPLY[mood]} මම ප්‍රශ්න {n}ක් අහන්නම්. උත්තරේ කියන්න මයික් බොත්තම ඔබන්න.",
+            "questions": [_public(q) for q in s["questions"]]}
+
+
+@router.get("/day-record/{patient_id}")
+async def day_record(patient_id: str, date: str = ""):
+    """Everything about one day, kept day by day: story, visits and what was talked
+    about, every memory game with each question, the patient's answer and how
+    much help they needed, mood, and the day's numbers."""
+    day = date or rm._today()
+    story = rm.STORIES.get(patient_id, {}).get(day, {}).get("si")
+    by_id = {p["id"]: p for p in rm.PEOPLE.get(patient_id, [])}
+    talks = []
+    for c in visit_talk.for_day(patient_id, day):
+        p = by_id.get(c["person_id"]) or {"relation_si": "අමුත්තා"}
+        talks.append({k: c.get(k) for k in ("id", "time", "seconds", "summary_si", "topics", "promises", "mood",
+                                             "visitor_asked", "patient_said")} |
+                     {"relation_si": p.get("relation_si"), "name": p.get("name"), "photo_url": p.get("photo_url")})
+    games = []
+    for s in [x for x in _finished(patient_id) if x["day"] == day]:
+        by_idx = {a["q_index"]: a for a in s["answers"]}
+        qs = []
+        for i, q in enumerate(s["questions"]):
+            a = by_idx.get(i, {})
+            last = (a.get("attempts") or [{}])[-1]
+            qs.append({"prompt_si": q["prompt_si"], "answer_si": q["answer_si"], "said": last.get("said") or "",
+                       "points": a.get("points", 0), "stage": a.get("stage_reached", "skipped"),
+                       "image": (q.get("media") or {}).get("urls", [None])[0] if (q.get("media") or {}).get("urls") else None})
+        games.append({"time": s.get("finished_at", s["created"])[11:16], "score": s["score"], "stars": s.get("stars"),
+                      "max_stars": s.get("max_stars"), "mood": s.get("mood"), "questions": qs})
+    inter = rm.INTERACTIONS.get(patient_id, {}).get(day, {})
+    return {"status": "success", "date": day,
+            "story": {"title": story.get("title"), "story": story.get("story")} if story else None,
+            "conversations": talks, "games": games,
+            "counts": {"moments": sum(1 for m in rm.MOMENTS.get(patient_id, []) if m["time"].startswith(day)),
+                       "visits": sum(r["count"] for r in inter.values() if r["kind"] == "person"),
+                       "finds": sum(1 for f in rm.FIND_LOG.get(patient_id, []) if f["time"].startswith(day))}}
 
 
 @router.post("/quiz/answer")
@@ -777,6 +1007,54 @@ async def quiz_finish(session_id: str = Form(...)):
     else:
         msg = f"අද ඔයාට තරු {got}ක් ලැබුණා. සෙල්ලම් කළාට හරිම ස්තූතියි! හෙට අපි ආයෙත් එකට කරමු."
     return {"status": "success", "score": pct, "stars": got, "max_stars": mx, "say_si": msg}
+
+
+@router.get("/quiz/today/{patient_id}")
+async def quiz_today(patient_id: str):
+    """For the app's menu card: is tonight's game ready, and was it played today?"""
+    today = rm._today()
+    played = [s for s in _finished(patient_id) if s["day"] == today]
+    prep = PREPARED.get(patient_id)
+    ready = bool(prep and prep["day"] == today and prep["questions"])
+    return {"status": "success", "ready": ready, "count": len(prep["questions"]) if ready else 0,
+            "played": bool(played), "last_score": played[-1]["score"] if played else None,
+            "story_hour": rm.STORY_HOUR}
+
+
+def prepare_tonight(pid):
+    questions, level, avg = build_questions(pid)
+    if questions:
+        PREPARED[pid] = {"day": rm._today(), "questions": questions, "level": level, "avg": avg,
+                         "created": datetime.datetime.now().isoformat()}
+        _save()
+    return len(questions)
+
+
+def _nightly_quiz_loop():
+    """At STORY_HOUR (8 PM) - together with the story - build tonight's memory
+    game for every patient who had a day worth asking about."""
+    import time
+    while True:
+        try:
+            if datetime.datetime.now().hour >= rm.STORY_HOUR:
+                today = rm._today()
+                pids = set(rm.MOMENTS) | set(rm.INTERACTIONS) | set(visit_talk.CONVERSATIONS)
+                for pid in pids:
+                    if pid.endswith("-TEST") or (PREPARED.get(pid) or {}).get("day") == today:
+                        continue
+                    if any(s["day"] == today for s in _finished(pid)):
+                        continue
+                    n = prepare_tonight(pid)
+                    if n:
+                        print(f"[nightly quiz] prepared {n} questions for {pid}")
+        except Exception as e:
+            print("nightly quiz loop error:", e)
+        time.sleep(300)
+
+
+threading.Thread(target=_nightly_quiz_loop, daemon=True, name="nightly-quiz").start()
+# New kinds of objects get their "what is it for" looked up once, in the background.
+rm._ctx["on_new_object"] = lambda label: threading.Thread(target=learn_object, args=(label,), daemon=True).start()
 
 
 @router.get("/quiz/history/{patient_id}")
@@ -963,9 +1241,17 @@ def build_report(pid, days=30):
              "person": (by_id.get(c["person_id"]) or {}).get("name"), "relation": (by_id.get(c["person_id"]) or {}).get("relation"),
              "photo_url": (by_id.get(c["person_id"]) or {}).get("photo_url"),
              "summary_si": c["summary_si"], "summary_en": c["summary_en"], "topics": c.get("topics", []),
-             "promises": c.get("promises", []), "mood": c.get("mood")}
+             "promises": c.get("promises", []), "mood": c.get("mood"),
+             "visitor_asked": c.get("visitor_asked", []), "patient_said": c.get("patient_said", [])}
             for c in reversed(visit_talk.CONVERSATIONS.get(pid, [])) if c["day"] >= dates[0]][:10],
     }
+    try:
+        import reminders  # lazy: reminders imports this module
+        report["routines"] = reminders.routines(pid)
+        report["visit_reminders"] = reminders.visits(pid)
+    except Exception as e:
+        print("report reminders failed:", e)
+        report["routines"], report["visit_reminders"] = [], []
     report["insights"] = _insights(report)
     return report
 
@@ -993,7 +1279,7 @@ def _session_view(s):
                     "retry": bool(q.get("retry")),
                     "points": a.get("points", 0), "stage": a.get("stage_reached", "skipped"),
                     "said": last.get("said") or "", "response_s": round(a.get("first_ms", 0) / 1000, 1) if a.get("first_ms") else None})
-    return {"id": s["id"], "date": s["day"], "time": s.get("finished_at", s["created"])[11:16],
+    return {"id": s["id"], "date": s["day"], "time": s.get("finished_at", s["created"])[11:16], "mood": s.get("mood"),
             "score": s["score"], "stars": s.get("stars"), "max_stars": s.get("max_stars"), "level": s["level"],
             "questions": out}
 

@@ -219,6 +219,7 @@ export const RELATIONS: { en: string; si: string; emoji: string }[] = [
 
 // ─── Nightly memory story reminder ───────────────────────────────────────
 const STORY_NOTIF_ID = 'memocare-nightly-story';
+const QUIZ_NOTIF_ID = 'memocare-nightly-quiz';
 export const STORY_HOUR = 20; // matches the AI server's STORY_HOUR default
 
 /** Local daily notification at STORY_HOUR - the server writes the story at the
@@ -241,6 +242,18 @@ export async function scheduleNightlyStory() {
         sound: true,
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour: STORY_HOUR, minute: 0 },
+    });
+    // Five minutes later: tonight's memory game (the server prepares it at STORY_HOUR).
+    await Notifications.cancelScheduledNotificationAsync(QUIZ_NOTIF_ID).catch(() => {});
+    await Notifications.scheduleNotificationAsync({
+      identifier: QUIZ_NOTIF_ID,
+      content: {
+        title: '🦉 අද මතක සෙල්ලම සූදානම්',
+        body: 'ඔයාගේ දවස ගැන ප්‍රශ්න 6ක් තියෙනවා. සෙල්ලම් කරන්න ඔබන්න.',
+        data: { url: '/patient/memory-quiz' },
+        sound: true,
+      },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour: STORY_HOUR, minute: 5 },
     });
   } catch {
     // Notifications are a nice-to-have; the story is still in the app.

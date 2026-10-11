@@ -31,7 +31,9 @@ const TYPE_LABEL = {
   replay: 'Video clip question', time_of_day: 'When it happened',
   who_came: 'Who came to visit', visit_time: 'When the visit was', which_object: 'What was used',
   which_first: 'What happened first', talk: 'What was talked about',
+  where_now: 'Where is it now', did_when: 'When was it done', used_for: 'What is it for', which_for: 'What was used for it',
 };
+const MOOD = { happy: '😊 happy', ok: '🙂 well', tired: '😴 tired', sad: '😢 sad' };
 
 const fmtDay = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
@@ -478,6 +480,8 @@ export default function MemoryReport() {
                         {c.mood && <> · {c.mood}</>}
                       </p>
                       <p className="mt-1 text-sm" style={{ color: C.ink }}>{c.summary_en}</p>
+                      {c.visitor_asked?.map((x, j) => <p key={`a${j}`} className="text-xs" style={{ color: C.soft }}>❓ Visitor asked: {x.en || x.si}</p>)}
+                      {c.patient_said?.map((x, j) => <p key={`s${j}`} className="text-xs" style={{ color: C.soft }}>🗣 Patient said: {x.en || x.si}</p>)}
                       <p className="text-xs" style={{ color: C.soft }}>{c.summary_si}</p>
                       {(c.topics?.length > 0 || c.promises?.length > 0) && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -492,6 +496,33 @@ export default function MemoryReport() {
                         </div>
                       )}
                     </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {(report.routines?.some((r) => r.learned) || report.visit_reminders?.length > 0) && (
+            <Card title="Learned routines and reminders" icon={RefreshCw}
+              subtitle="Usual times learned from the camera (median of the first use each day). A reminder is spoken only if it has not been done by then.">
+              <div className="grid gap-3 md:grid-cols-2">
+                {report.routines.filter((r) => r.learned).map((r) => (
+                  <div key={r.id} className="rounded-2xl border px-4 py-3" style={{ borderColor: r.flag ? '#F5C2A7' : C.line, background: C.paper }}>
+                    <p className="text-sm font-semibold capitalize">{r.activity_en || r.label}</p>
+                    <p className="text-xs" style={{ color: C.soft }}>
+                      usually {r.usual_si} · seen {r.days_seen}/{r.days} days · reminder after {r.grace} min
+                    </p>
+                    <p className="mt-1 text-xs" style={{ color: r.done_today ? C.free : C.mmse }}>
+                      {r.done_today ? 'Done today' : 'Not seen today yet'}
+                      {r.reminded > 0 && <> · reminders that helped: {r.helped}/{r.reminded}</>}
+                      {r.flag && <> · ⚠ often missed after a reminder</>}
+                    </p>
+                  </div>
+                ))}
+                {report.visit_reminders?.map((v) => (
+                  <div key={v.id} className="rounded-2xl border px-4 py-3" style={{ borderColor: '#F6DFB0', background: '#FFF8EB' }}>
+                    <p className="text-sm font-semibold">📅 {fmtDay(v.date)} - visit promised</p>
+                    <p className="text-xs" style={{ color: C.soft }}>{v.who_si}: {v.promise_si}</p>
                   </div>
                 ))}
               </div>
@@ -521,7 +552,7 @@ export default function MemoryReport() {
               {report.recent_sessions.slice(0, 4).map((g) => (
                 <div key={g.id} className="rounded-2xl border p-4" style={{ borderColor: C.line }}>
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">{fmtDay(g.date)} · {g.time}</p>
+                    <p className="text-sm font-semibold">{fmtDay(g.date)} · {g.time}{g.mood && <span className="ml-2 font-normal" style={{ color: C.soft }}>felt {MOOD[g.mood] || g.mood}</span>}</p>
                     <p className="flex items-center gap-2 text-sm" style={{ color: C.soft }}>
                       <span className="flex">{Array.from({ length: g.max_stars || 0 }).map((_, i) => (
                         <Star key={i} size={13} fill={i < g.stars ? '#E0A458' : 'none'} stroke={i < g.stars ? '#E0A458' : '#D6D0C4'} />

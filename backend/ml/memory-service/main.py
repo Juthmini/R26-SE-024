@@ -1411,6 +1411,10 @@ import visit_talk  # visit conversation summaries (consent-based); before memory
 app.include_router(visit_talk.router)
 import memory_quiz  # daily memory game + memory report (reads remember_moments' stores)
 app.include_router(memory_quiz.router)
+import memory_video  # video diary of the day (story narration + Sinhala cards)
+app.include_router(memory_video.router)
+import reminders  # adaptive reminders learned from routines and visit promises
+app.include_router(reminders.router)
 
 
 if __name__ == "__main__":
