@@ -102,6 +102,25 @@ export default function FamilyUI() {
     ]);
   };
 
+  // Consent is the family member's own choice - the caregiver records it here (PIN-protected).
+  const toggleTalk = (p: Person) => {
+    const allow = !p.conversation_ok;
+    const save = async () => {
+      const cur = getCaregiverPin();
+      if (!pid || !cur) return setGate('enter');
+      await axios.post(`${AI_URL}/family/consent`,
+        form({ patient_id: pid, pin: cur, person_id: p.id, allow: allow ? 'true' : 'false' }), MULTIPART).catch(() => {});
+      loadFamily(pid);
+    };
+    if (!allow) return save();
+    Alert.alert(
+      'කතාබහ සාරාංශ කරන්න අවසරද?',
+      `${p.name} (${p.relation_si}) රෝගියා බලන්න ආවම කතා කරන දේවල් app එක අහලා කෙටි සාරාංශයක් විතරක් තියාගන්නවා. ` +
+        'Audio එක save වෙන්නේ නැහැ. මේකට එයාගේ අවසරය ගත්තද?',
+      [{ text: 'නැහැ', style: 'cancel' }, { text: 'ඔව්, අවසර තියෙනවා', onPress: save }],
+    );
+  };
+
   const markAlertsSeen = async () => {
     const cur = getCaregiverPin();
     if (!pid || !cur) return;
@@ -227,6 +246,13 @@ export default function FamilyUI() {
                 <Text style={s.rel}>{p.relation_si}</Text>
                 {p.name && p.name !== p.relation_si ? <Text style={s.name}>{p.name}</Text> : null}
                 <Text style={s.meta}>🧠 මුහුණු {p.face_samples || 0}ක්</Text>
+                <TouchableOpacity onPress={() => toggleTalk(p)}
+                  style={[s.talkChip, p.conversation_ok && { backgroundColor: '#0f766e', borderColor: '#0f766e' }]}>
+                  <Ionicons name={p.conversation_ok ? 'mic' : 'mic-off'} size={13} color={p.conversation_ok ? '#fff' : '#64748b'} />
+                  <Text style={[s.talkChipText, p.conversation_ok && { color: '#fff' }]}>
+                    {p.conversation_ok ? 'කතාබහ: අවසර ඇත' : 'කතාබහ: අවසර නැත'}
+                  </Text>
+                </TouchableOpacity>
                 {p.enrolled && <View style={s.badge}><Ionicons name="shield-checkmark" size={14} color="#fff" /></View>}
               </TouchableOpacity>
             ))}
@@ -241,6 +267,9 @@ export default function FamilyUI() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0fdfa' },
   scroll: { padding: 20, paddingBottom: 48 },
+  talkChip: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#fff', alignSelf: 'center' },
+  talkChipText: { fontSize: 11, fontWeight: '700', color: '#64748b' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 18, paddingHorizontal: 0 },
   backBtn: { width: 46, height: 46, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ccfbf1' },
   lockBtn: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ccfbf1' },

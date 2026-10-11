@@ -11,6 +11,7 @@ import PersonalizedObjectUpload from './pages/PersonalizedObjectUpload';
 import PersonalizedAnalytics from './pages/PersonalizedAnalytics';
 import BehaviorAnomalyReports from './pages/BehaviorAnomalyReports';
 import GeofenceSettings from './pages/GeofenceSettings';
+import MemoryReport from './pages/MemoryReport';
 import Layout from './components/Layout';
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
           <Route path="anomaly-reports" element={<BehaviorAnomalyReports />} />
           <Route path="geofence" element={<GeofenceSettings />} />
           <Route path="bulk-upload" element={<PatientBulkUpload />} />
+          <Route path="memory-report" element={<MemoryReport />} />
         </Route>
 
         <Route path="/" element={<Navigate to="/login" replace />} />

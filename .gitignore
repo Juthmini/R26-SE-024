@@ -13,6 +13,8 @@ hardware/
 
 # Runtime data written by the AI memory service
 backend/ml/memory-service/moments_db.json
+backend/ml/memory-service/memory_quiz_db.json
+backend/ml/memory-service/visit_talk_db.json
 backend/ml/memory-service/esp32_passive.json
 backend/ml/memory-service/tts_cache/
 backend/ml/memory-service/videos/

@@ -49,6 +49,7 @@ export interface Person {
   created?: string;
   enrolled?: boolean;     // registered by the caregiver (vs. learned from an answer)
   said?: string;
+  conversation_ok?: boolean; // family member agreed that visit conversations may be summarised
 }
 
 export interface FamilyAlert {

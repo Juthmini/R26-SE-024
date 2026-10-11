@@ -36,6 +36,7 @@ export default function FamilyEnrollUI() {
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
   const [relation, setRelation] = useState<string | null>(null);
+  const [talkOk, setTalkOk] = useState(false); // consent to summarise visit conversations - off unless given
   const [message, setMessage] = useState('');
   const [saved, setSaved] = useState<{ name: string; relation_si: string; photo_url: string; samples: number } | null>(null);
   const alive = useRef(true);
@@ -110,6 +111,7 @@ export default function FamilyEnrollUI() {
       f.append('pin', pin);
       f.append('name', name.trim());
       f.append('relation', relation);
+      f.append('conversation_ok', talkOk ? 'true' : 'false');
       goodShots.forEach((s, i) => f.append('files', { uri: s.uri, name: `face${i}.jpg`, type: 'image/jpeg' } as any));
       const res = await axios.post(`${AI_URL}/family/enroll`, f, {
         headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000,
@@ -193,6 +195,16 @@ export default function FamilyEnrollUI() {
               </TouchableOpacity>
             ))}
           </View>
+          <TouchableOpacity style={[s.consent, talkOk && s.consentOn]} onPress={() => setTalkOk((v) => !v)} activeOpacity={0.85}>
+            <Ionicons name={talkOk ? 'checkbox' : 'square-outline'} size={26} color={talkOk ? '#5eead4' : '#94a3b8'} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.consentTitle}>🎙 කතාබහ සාරාංශ කරන්න අවසර</Text>
+              <Text style={s.consentText}>
+                මේ කෙනා බලන්න ආවම කතා කරන දේවල් app එක අහලා කෙටි සාරාංශයක් විතරක් තියාගන්නවා (audio save වෙන්නේ නැහැ).
+                එයාගෙන් අවසර ගත්තා නම් විතරක් tick කරන්න.
+              </Text>
+            </View>
+          </TouchableOpacity>
           {!!message && <Text style={s.err}>{message}</Text>}
           <TouchableOpacity style={s.primary} onPress={save} disabled={step === 'saving'}>
             {step === 'saving' ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryText}>ලියාපදිංචි කරන්න</Text>}
@@ -274,6 +286,11 @@ const s = StyleSheet.create({
   relEmoji: { fontSize: 24 },
   relText: { color: '#ccfbf1', fontWeight: '800', marginTop: 2 },
   err: { color: '#fca5a5', fontWeight: '700', textAlign: 'center', marginBottom: 8 },
+  consent: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', padding: 14, borderRadius: 16, borderWidth: 1.5,
+    borderColor: '#334155', marginTop: 18, marginBottom: 12 },
+  consentOn: { borderColor: '#5eead4', backgroundColor: 'rgba(94,234,212,0.08)' },
+  consentTitle: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  consentText: { color: '#94a3b8', fontSize: 12.5, lineHeight: 18, marginTop: 3 },
   primary: { alignSelf: 'stretch', backgroundColor: '#14b8a6', borderRadius: 18, paddingVertical: 16, alignItems: 'center' },
   primaryText: { color: '#042f2e', fontWeight: '900', fontSize: 17 },
 

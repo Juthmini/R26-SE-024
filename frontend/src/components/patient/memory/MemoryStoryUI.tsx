@@ -1,11 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import axios from 'axios';
 import { AI_URL, Lang, Person, getPatientId, speak, stopSpeaking } from '../../../services/memoryAI';
-import { StoryArt } from './findThings/Illustrations';
+import { QuizArt, StoryArt } from './findThings/Illustrations';
 
 type Story = {
   title: string; story: string; photos: string[]; people: Person[]; moment_count?: number;
@@ -26,6 +26,8 @@ export default function MemoryStoryUI() {
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [invite, setInvite] = useState(false);
+  const stopped = useRef(false);
 
   const load = useCallback(async (l: Lang, d: string, refresh = false) => {
     setLoading(true);
@@ -60,13 +62,21 @@ export default function MemoryStoryUI() {
   const play = async () => {
     if (!story) return;
     if (speaking) {
+      stopped.current = true;
       stopSpeaking();
       setSpeaking(false);
       return;
     }
+    stopped.current = false;
+    setInvite(false);
     setSpeaking(true);
     await speak(`${story.title ? story.title + '. ' : ''}${story.story}`, lang);
     setSpeaking(false);
+    // Story heard to the end -> gently offer the memory game about it (the patient chooses).
+    if (!stopped.current && date === today() && (story.photos?.length || story.people?.length)) {
+      setInvite(true);
+      speak(lang === 'si' ? 'කතාව ඉවරයි! දැන් ඒ කතාව ගැන පොඩි මතක සෙල්ලමක් කරමුද?' : 'That was your day! Shall we play a little memory game about it?', lang);
+    }
   };
 
   return (
@@ -143,6 +153,31 @@ export default function MemoryStoryUI() {
               <Ionicons name={speaking ? 'stop' : 'play'} size={26} color="#fff" />
               <Text style={s.playText}>{speaking ? 'නවත්තන්න' : lang === 'si' ? 'කතාව අහන්න' : 'Listen to the story'}</Text>
             </TouchableOpacity>
+            {invite && (
+              <View style={s.invite}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <QuizArt size={64} />
+                  <Text style={s.inviteText}>
+                    {lang === 'si' ? 'කතාව ඉවරයි! දැන් ඒ කතාව ගැන පොඩි මතක සෙල්ලමක් කරමුද?' : 'Shall we play a little memory game about your day?'}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                  <TouchableOpacity style={[s.quizBtn, { flex: 1, marginTop: 0 }]}
+                    onPress={() => { setInvite(false); stopSpeaking(); router.push('/patient/memory-quiz' as any); }}>
+                    <Text style={s.quizText}>{lang === 'si' ? 'ඔව්, කරමු!' : 'Yes, let’s play'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.laterBtn} onPress={() => { setInvite(false); stopSpeaking(); }}>
+                    <Text style={s.laterText}>{lang === 'si' ? 'පස්සේ' : 'Later'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+            {date === today() && !invite && (
+              <TouchableOpacity style={s.quizBtn} onPress={() => router.push('/patient/memory-quiz' as any)}>
+                <Text style={{ fontSize: 22 }}>🦉</Text>
+                <Text style={s.quizText}>{lang === 'si' ? 'කතාව ගැන මතක සෙල්ලමක් කරමු' : 'Play a memory game about today'}</Text>
+              </TouchableOpacity>
+            )}
             {date === today() && (
               <TouchableOpacity style={s.videoBtn} onPress={() => load(lang, date, true)}>
                 <Ionicons name="sparkles" size={20} color="#be185d" />
@@ -195,4 +230,11 @@ const s = StyleSheet.create({
   minutes: { marginTop: 12, color: '#c2410c', fontWeight: '800', fontSize: 15 },
   videoBtn: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', borderRadius: 18, paddingVertical: 14, marginTop: 10, borderWidth: 2, borderColor: '#fbcfe8' },
   videoText: { color: '#be185d', fontWeight: '900', fontSize: 16 },
+  quizBtn: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 18, paddingVertical: 16, marginTop: 10, backgroundColor: '#2A6F6A' },
+  quizText: { color: '#fff', fontWeight: '900', fontSize: 16 },
+  invite: { marginTop: 14, backgroundColor: '#FBF5EA', borderRadius: 22, padding: 16, borderWidth: 1.5, borderColor: '#EADFCB' },
+  inviteText: { flex: 1, fontSize: 17, lineHeight: 25, fontWeight: '700', color: '#22313A' },
+  laterBtn: { paddingHorizontal: 22, borderRadius: 18, borderWidth: 1.5, borderColor: '#EADFCB', backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center' },
+  laterText: { color: '#6B7A80', fontWeight: '800', fontSize: 16 },
 });

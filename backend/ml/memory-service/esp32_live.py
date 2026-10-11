@@ -166,6 +166,28 @@ class PassiveWorker(threading.Thread):
         self.dwell = None          # {start, counts, frames, last_hit}
         self.visit = None          # {start, last_seen, checked_at, person_id, done, alerted}
         self.last_saved = {}       # label-set key -> epoch
+        self.lost_since = None     # when the camera stopped answering
+        self.last_search = 0.0
+
+    def _maybe_rediscover(self, stream):
+        """The hotspot hands out a new IP after a reconnect. If the camera has
+        been unreachable for 30s, look for it again and follow it."""
+        now = time.time()
+        if self.lost_since is None:
+            self.lost_since = now
+            return stream
+        if now - self.lost_since < 30 or now - self.last_search < 30:
+            return stream
+        self.last_search = now
+        self.state = "camera lost - searching the network"
+        cams, _ = discover()
+        if cams and cams[0]["ip"] != self.host:
+            self.host = cams[0]["ip"]
+            self.log("rediscovered", f"Camera found again at {self.host}")
+            _save_config()
+            self.lost_since = None
+            return ensure_stream(self.host)
+        return stream
 
     def log(self, kind, text, photo=""):
         self.events.appendleft({"time": datetime.datetime.now().isoformat(), "kind": kind, "text": text, "photo_url": photo})
@@ -183,8 +205,11 @@ class PassiveWorker(threading.Thread):
             jpeg = stream.frame()
             if jpeg is None or stream.frame_no == last_frame_no:
                 self.state = "waiting for camera" if not stream.connected else "running"
+                if not stream.connected:
+                    stream = self._maybe_rediscover(stream)
                 time.sleep(0.05)
                 continue
+            self.lost_since = None
             last_frame_no = stream.frame_no
             self.state = "running"
             try:
@@ -319,7 +344,87 @@ for _pid, _cfg in _load_config().items():
         print("could not resume ESP32 passive worker:", _e)
 
 
+# ─── Auto-discovery (nobody should have to type an IP address) ───────────────
+import socket
+from concurrent.futures import ThreadPoolExecutor
+
+MDNS_NAME = "memocare-cam.local"  # advertised by the firmware
+
+
+def _laptop_ip():
+    # The address this machine uses to reach the network (no packet is sent).
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return None
+    finally:
+        s.close()
+
+
+def _is_memocare_cam(ip):
+    try:
+        r = requests.get(f"http://{ip}/status", timeout=0.8)
+        d = r.json()
+        if d.get("device") == "memocare-cam":
+            return {"ip": ip, "rssi": d.get("rssi"), "uptime_s": d.get("uptime_s")}
+    except Exception:
+        pass
+    return None
+
+
+def discover():
+    """Find MemoCare cameras on the laptop's network: mDNS name first, then a
+    parallel sweep of the subnet (an iPhone hotspot is only 172.20.10.1-14,
+    so that takes about a second)."""
+    found = {}
+    try:
+        ip = socket.gethostbyname(MDNS_NAME)
+        hit = _is_memocare_cam(ip)
+        if hit:
+            found[ip] = hit
+    except Exception:
+        pass
+
+    me = _laptop_ip()
+    if me:
+        a, b, c, _ = me.split(".")
+        hosts = range(1, 15) if (a, b, c) == ("172", "20", "10") else range(1, 255)
+        candidates = [f"{a}.{b}.{c}.{h}" for h in hosts if f"{a}.{b}.{c}.{h}" != me]
+        with ThreadPoolExecutor(max_workers=64) as pool:
+            for hit in pool.map(_is_memocare_cam, candidates):
+                if hit:
+                    found[hit["ip"]] = hit
+    # Strongest signal first - that's the one nearest the laptop/hotspot.
+    return sorted(found.values(), key=lambda h: -(h.get("rssi") or -100)), me
+
+
 # ─── Endpoints ───────────────────────────────────────────────────────────────
+@router.get("/esp32/discover")
+async def esp32_discover():
+    cams, me = discover()
+    return {"status": "success", "cameras": cams, "laptop_ip": me}
+
+
+@router.get("/esp32/snapshot")
+async def esp32_snapshot(ip: str):
+    """Latest frame as an image, for the app's live preview (the phone can't
+    open the camera's stream directly as easily as an <Image> can load this)."""
+    from fastapi.responses import Response
+    host = _host(ip)
+    jpeg = ensure_stream(host).frame()
+    if jpeg is None:
+        try:
+            r = requests.get(f"http://{host}/capture", timeout=5)
+            jpeg = r.content if r.ok else None
+        except Exception:
+            jpeg = None
+    if jpeg is None:
+        return Response(status_code=503)
+    return Response(content=jpeg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @router.get("/esp32/probe")
 async def probe(ip: str):
     """Is the camera reachable, and how fast does its live video arrive?"""

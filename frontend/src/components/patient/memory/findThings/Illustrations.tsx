@@ -83,6 +83,27 @@ export function StoryArt({ size = 96 }: Props) {
   );
 }
 
+export function QuizArt({ size = 96 }: Props) {
+  // The memory-game owl, sitting on a book.
+  return (
+    <Svg width={size} height={size} viewBox="0 0 120 120">
+      <Circle cx="60" cy="60" r="56" fill="#FCEFD9" />
+      <Rect x="26" y="88" width="68" height="12" rx="3" fill="#2A6F6A" />
+      <Rect x="30" y="85" width="60" height="5" rx="2" fill="#FFFDF8" />
+      <Path d="M38 38 L44 20 L52 34 Z" fill="#B5835A" />
+      <Path d="M82 38 L76 20 L68 34 Z" fill="#B5835A" />
+      <Ellipse cx="60" cy="58" rx="26" ry="29" fill="#C99A6E" />
+      <Ellipse cx="60" cy="68" rx="16" ry="16" fill="#F3E3C8" />
+      <Circle cx="50" cy="50" r="10" fill="#FFFDF8" />
+      <Circle cx="70" cy="50" r="10" fill="#FFFDF8" />
+      <Circle cx="51" cy="51" r="4.5" fill="#22313A" />
+      <Circle cx="71" cy="51" r="4.5" fill="#22313A" />
+      <Path d="M56 60 L64 60 L60 66 Z" fill="#D9A441" />
+      <Path d="M92 26 l2.5 5 5.5 0.8 -4 3.9 1 5.5 -5 -2.6 -5 2.6 1 -5.5 -4 -3.9 5.5 -0.8 Z" fill="#E0A458" />
+    </Svg>
+  );
+}
+
 export function PhoneCamArt({ size = 40 }: Props) {
   return (
     <Svg width={size} height={size} viewBox="0 0 48 48">

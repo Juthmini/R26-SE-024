@@ -3,11 +3,12 @@ import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Location from 'expo-location';
 import axios from 'axios';
 import Svg, { Circle } from 'react-native-svg';
-import { RecordingPresets, useAudioRecorder } from 'expo-audio';
+import { RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import {
   AI_URL, CameraSource, Detection, getPatientId, loadCameraSource, speak, startListening,
   stopAndUnderstand, stopSpeaking,
@@ -43,12 +44,40 @@ type Phase = 'watching' | 'saving' | 'asking' | 'listening' | 'thinking';
 type Toast = { text: string; photo?: string; tone: 'ok' | 'info' | 'warn' };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const TALK_CLIP_MS = 30000; // visit-conversation audio is sent in clips of this length
 
 export default function RememberLiveUI() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ room?: string }>();
+  // Room camera mode: the phone sits on a stand like a fixed camera. Screen
+  // goes dark (an OLED black screen draws almost no power) and stays awake;
+  // everything else - remembering, greeting people, asking "who is this?" -
+  // runs exactly as normal. It is deliberately visible, not hidden: iOS stops
+  // the camera in the background anyway, and covert recording of a patient
+  // would not be ethical.
+  const [roomMode, setRoomMode] = useState(params.room === '1');
+  const [peek, setPeek] = useState(false);
+  const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (roomMode) activateKeepAwakeAsync('room-camera').catch(() => {});
+    else deactivateKeepAwake('room-camera').catch(() => {});
+    return () => {
+      deactivateKeepAwake('room-camera').catch(() => {});
+    };
+  }, [roomMode]);
+
+  const showBriefly = () => {
+    setPeek(true);
+    if (peekTimer.current) clearTimeout(peekTimer.current);
+    peekTimer.current = setTimeout(() => setPeek(false), 8000);
+  };
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const talkRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const talk = useRef<{ visitId: string; personId: string; stop: boolean; startedAt: number; done: Promise<void> | null } | null>(null);
+  const [talking, setTalking] = useState(false);
 
   const [cam, setCam] = useState<CameraSource | null>(null);
   const [patientId, setPatientId] = useState<string | null>(null);
@@ -63,6 +92,12 @@ export default function RememberLiveUI() {
   const [paused, setPaused] = useState(false);
   const [listenLeft, setListenLeft] = useState(0);
   const [askRetry, setAskRetry] = useState(false);
+
+  // In room mode, show the screen again while an answer is needed - the
+  // "say again / later" buttons are useless behind the dark veil.
+  useEffect(() => {
+    if (roomMode && askRetry) setPeek(true);
+  }, [roomMode, askRetry]);
   const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
 
   // Small frames are the biggest speed win: a full 12MP photo is slow to take
@@ -97,6 +132,7 @@ export default function RememberLiveUI() {
     return () => {
       mounted.current = false;
       stopSpeaking();
+      if (talk.current) talk.current.stop = true; // leaving the screen ends the recording
     };
   }, []);
 
@@ -165,7 +201,9 @@ export default function RememberLiveUI() {
         return;
       }
 
-      await speak(pv.say_si);
+      // During a family conversation the app stays quiet (and speaking would
+      // interrupt the recording) - the toast still shows what was remembered.
+      if (!talk.current) await speak(pv.say_si);
       await sleep(SAVE_DELAY_MS);
       const res = (await post(false)).data;
       if (res.status !== 'success') throw new Error(res.message);
@@ -218,12 +256,71 @@ export default function RememberLiveUI() {
       await speak(res.data.say_si);
       busy.current = false;
       setPhase('watching');
+      if (result === 'verified' && res.data.person?.conversation_ok && visit.current) talkStart(res.data.person.id);
     } catch {
       await speak('සමාවෙන්න, තේරුණේ නැහැ. ආයෙත් කියන්න.');
       setAskRetry(true);
       setPhase('asking');
     }
   }, [patientId, recorder]);
+
+  // ─── Visit conversation (only with the family member's consent) ──────
+  // While a consenting, face-verified family member is here, record ~30 s clips
+  // and send each for transcription; the server keeps only a summary when the
+  // visit ends (audio and transcript are discarded). A visible "listening"
+  // badge is shown the whole time.
+  const talkStart = useCallback(async (personId: string) => {
+    if (!patientId || talk.current) return;
+    const t = { visitId: `v-${Date.now()}`, personId, stop: false, startedAt: Date.now(), done: null as Promise<void> | null };
+    talk.current = t;
+    setTalking(true);
+    t.done = (async () => {
+      while (!t.stop && mounted.current) {
+        try {
+          await startListening(talkRecorder);
+        } catch {
+          break; // no microphone permission - the visit is still logged as usual
+        }
+        const clipStart = Date.now();
+        while (!t.stop && mounted.current && Date.now() - clipStart < TALK_CLIP_MS) await sleep(400);
+        try {
+          await talkRecorder.stop();
+          const uri = talkRecorder.uri;
+          if (uri && Date.now() - clipStart > 3000) {
+            const f = new FormData();
+            f.append('patient_id', patientId);
+            f.append('person_id', personId);
+            f.append('visit_id', t.visitId);
+            f.append('seconds', String(Math.round((Date.now() - clipStart) / 1000)));
+            f.append('file', { uri, name: 'clip.m4a', type: 'audio/m4a' } as any);
+            await axios.post(`${AI_URL}/visit/audio`, f, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 });
+          }
+        } catch {
+          // a lost clip only makes the summary shorter
+        }
+      }
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).catch(() => {});
+    })();
+  }, [patientId, talkRecorder]);
+
+  const talkEnd = useCallback(async () => {
+    const t = talk.current;
+    if (!t || !patientId) return;
+    t.stop = true;
+    talk.current = null;
+    setTalking(false);
+    await t.done;
+    const f = new FormData();
+    f.append('patient_id', patientId);
+    f.append('visit_id', t.visitId);
+    f.append('seconds', String(Math.round((Date.now() - t.startedAt) / 1000)));
+    try {
+      const res = await axios.post(`${AI_URL}/visit/end`, f, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 });
+      if (res.data.result === 'saved' && mounted.current) {
+        showToast({ text: `💬 ${res.data.summary_si}`, tone: 'info' }, 6000);
+      }
+    } catch {}
+  }, [patientId]);
 
   const skipPerson = () => {
     pendingFace.current = null;
@@ -239,6 +336,7 @@ export default function RememberLiveUI() {
     visit.current = null;
     setPersonProgress(0);
     setPersonTag(null);
+    talkEnd();
     if (!v?.personId || !patientId) return;
     const form = new FormData();
     form.append('patient_id', patientId);
@@ -248,7 +346,7 @@ export default function RememberLiveUI() {
     axios.post(`${AI_URL}/log-interaction`, form, {
       headers: { 'Content-Type': 'multipart/form-data' }, timeout: 10000,
     }).catch(() => {});
-  }, [patientId]);
+  }, [patientId, talkEnd]);
 
   // ask=false: instant, silent check run as soon as someone appears - known
   // family are greeted immediately; unknown faces are only labelled.
@@ -273,7 +371,10 @@ export default function RememberLiveUI() {
         setPersonTag({ text: `${d.person.relation_si}${who} ✓`, color: '#16a34a' });
         setPersonProgress(0);
         showToast({ text: d.say_si, photo: d.person.photo_url, tone: 'info' }, 4500);
-        speak(d.say_si);
+        // Greet first, then (with consent) start listening to the visit's conversation.
+        speak(d.say_si).then(() => {
+          if (d.person.conversation_ok && visit.current === v) talkStart(d.person.id);
+        });
       } else if (d.status === 'pending_known') {
         v.done = true; // seen before but not yet approved by the caregiver - don't ask again
         setPersonTag({ text: 'තහවුරු කර නැති කෙනෙක්', color: '#d97706' });
@@ -300,7 +401,7 @@ export default function RememberLiveUI() {
     } catch {
       // Face check is best-effort; the object loop carries on regardless.
     }
-  }, [patientId, listenForName]);
+  }, [patientId, listenForName, talkStart]);
 
   // ─── Per-frame dwell tracking ────────────────────────────────────────
   const onFrame = useCallback((dets: Detection[]) => {
@@ -469,6 +570,15 @@ export default function RememberLiveUI() {
           <Text style={s.title}>මතක තියාගන්න</Text>
           <Text style={s.sub}>{cam.source === 'esp32' ? `ESP32 · ${cam.esp32Ip}` : 'Phone camera'} · live</Text>
         </View>
+        <TouchableOpacity
+          onPress={() => {
+            setRoomMode(true);
+            setPeek(false);
+            speak('කාමර කැමරා මාදිලිය. ෆෝන් එක stand එකක තියන්න.');
+          }}
+          style={s.iconBtn}>
+          <Ionicons name="moon" size={21} color="#fff" />
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setPaused((p) => !p)} style={s.iconBtn}>
           <Ionicons name={paused ? 'play' : 'pause'} size={22} color="#fff" />
         </TouchableOpacity>
@@ -525,6 +635,14 @@ export default function RememberLiveUI() {
           </View>
         )}
 
+        {talking && (
+          <View style={s.talkBadge} pointerEvents="none">
+            <View style={s.talkDot} />
+            <Ionicons name="mic" size={15} color="#fff" />
+            <Text style={s.talkText}>කතාබහ මතක තියාගන්නවා · අවසර ඇතුව</Text>
+          </View>
+        )}
+
         {paused && (
           <View style={[StyleSheet.absoluteFill, s.center, s.pausedVeil]}>
             <Ionicons name="pause-circle" size={72} color="#fff" />
@@ -573,7 +691,27 @@ export default function RememberLiveUI() {
         )}
       </View>
 
-      {toast && (
+      {roomMode && !peek && (
+        // The camera keeps running underneath - this only darkens the screen.
+        <TouchableOpacity style={s.roomVeil} activeOpacity={1} onPress={showBriefly}>
+          <View style={s.roomCenter}>
+            <View style={[s.roomDot, offline && { backgroundColor: '#ef4444' }]} />
+            <Text style={s.roomTitle}>📷 කැමරාව බලාගෙන ඉන්නවා</Text>
+            {talking && <Text style={[s.roomTitle, { color: '#f87171' }]}>🎙 කතාබහ මතක තියාගන්නවා</Text>}
+            <Text style={s.roomStatus}>{offline ? 'AI සේවාව සම්බන්ධ නැහැ' : statusText[phase]}</Text>
+            {!!toast && <Text style={s.roomLast} numberOfLines={2}>{toast.text}</Text>}
+          </View>
+          <View style={s.roomFooter}>
+            <Text style={s.roomHint}>Room camera mode · ඔබලා බලන්න</Text>
+            <TouchableOpacity style={s.roomExit} onPress={() => { setRoomMode(false); setPeek(false); }}>
+              <Ionicons name="sunny" size={18} color="#94a3b8" />
+              <Text style={s.roomExitText}>සාමාන්‍ය තිරය</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {toast && (!roomMode || peek) && (
         <View style={[s.toast, toast.tone === 'warn' ? s.toastWarn : toast.tone === 'info' ? s.toastInfo : s.toastOk]}>
           {toast.photo ? <Image source={{ uri: toast.photo }} style={s.toastImg} /> : <Ionicons name="checkmark-circle" size={30} color="#fff" />}
           <Text style={s.toastText}>{toast.text}</Text>
@@ -584,6 +722,20 @@ export default function RememberLiveUI() {
 }
 
 const s = StyleSheet.create({
+  talkBadge: { position: 'absolute', top: 12, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(190,18,60,0.88)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  talkDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#fecaca' },
+  talkText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  roomVeil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 50, justifyContent: 'space-between', padding: 28 },
+  roomCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  roomDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#22c55e' },
+  roomTitle: { color: '#64748b', fontSize: 17, fontWeight: '800' },
+  roomStatus: { color: '#475569', fontSize: 14, fontWeight: '600' },
+  roomLast: { color: '#334155', fontSize: 13, textAlign: 'center', marginTop: 6 },
+  roomFooter: { alignItems: 'center', gap: 10 },
+  roomHint: { color: '#334155', fontSize: 12, fontWeight: '600' },
+  roomExit: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#1e293b', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8 },
+  roomExitText: { color: '#94a3b8', fontWeight: '700' },
   container: { flex: 1, backgroundColor: '#0b1120' },
   center: { alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 10 },

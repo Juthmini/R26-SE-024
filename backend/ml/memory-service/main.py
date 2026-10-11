@@ -1407,6 +1407,10 @@ app.include_router(remember_moments.router)
 
 import esp32_live  # after init(): its passive workers use the shared models
 app.include_router(esp32_live.router)
+import visit_talk  # visit conversation summaries (consent-based); before memory_quiz, which asks about them
+app.include_router(visit_talk.router)
+import memory_quiz  # daily memory game + memory report (reads remember_moments' stores)
+app.include_router(memory_quiz.router)
 
 
 if __name__ == "__main__":

@@ -75,6 +75,7 @@ INTERACTIONS = {}    # pid -> {date: {key: {kind, ref, name_si, seconds, count}}
 STORIES = {}         # pid -> {date: {lang: {title, story, photos, people, created, auto}}}
 CAREGIVER_PINS = {}  # pid -> sha256(pin) - gates family registration / approvals
 FAMILY_ALERTS = {}   # pid -> [{id, kind, claimed, photo_url, said, time, seen}]
+FIND_LOG = {}        # pid -> [{time, label, found, q}] - every "where is my ...?" (a forgetting signal)
 
 STORY_HOUR = int(os.environ.get("STORY_HOUR", "20"))
 FACE_MATCH = 0.65        # FaceNet cosine - same threshold the face-login flow uses
@@ -95,7 +96,7 @@ INFER_LOCK = threading.RLock()
 
 
 def _load():
-    global MOMENTS, LAST_SEEN, PEOPLE, OBJECT_GALLERY, INTERACTIONS, STORIES, CAREGIVER_PINS, FAMILY_ALERTS
+    global MOMENTS, LAST_SEEN, PEOPLE, OBJECT_GALLERY, INTERACTIONS, STORIES, CAREGIVER_PINS, FAMILY_ALERTS, FIND_LOG
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
@@ -108,6 +109,7 @@ def _load():
             STORIES = data.get("STORIES", {})
             CAREGIVER_PINS = data.get("CAREGIVER_PINS", {})
             FAMILY_ALERTS = data.get("FAMILY_ALERTS", {})
+            FIND_LOG = data.get("FIND_LOG", {})
         except Exception as e:
             print("moments_db load failed:", e)
     # Older records stored a single "embedding" - move it into the gallery.
@@ -123,7 +125,7 @@ def _save():
             json.dump({"MOMENTS": MOMENTS, "LAST_SEEN": LAST_SEEN, "PEOPLE": PEOPLE,
                        "OBJECT_GALLERY": OBJECT_GALLERY, "INTERACTIONS": INTERACTIONS,
                        "STORIES": STORIES, "CAREGIVER_PINS": CAREGIVER_PINS,
-                       "FAMILY_ALERTS": FAMILY_ALERTS}, f, ensure_ascii=False)
+                       "FAMILY_ALERTS": FAMILY_ALERTS, "FIND_LOG": FIND_LOG}, f, ensure_ascii=False)
 
 
 def _today():
@@ -137,6 +139,10 @@ def _add_interaction(pid, kind, ref, name_si, seconds):
     rec["seconds"] += max(0, int(seconds))
     rec["count"] += 1
     rec["name_si"] = name_si or rec["name_si"]
+    # When it happened - the memory game asks "morning or evening?" and "what came first?"
+    now = datetime.datetime.now().isoformat()
+    rec.setdefault("first", now)
+    rec["last"] = now
 
 
 _load()
@@ -210,6 +216,53 @@ RELATIONS = {
     "husband": ("husband", "සැමියා"), "friend": ("friend", "යාළුවා"), "nurse": ("nurse", "හෙදිය"),
     "doctor": ("doctor", "දොස්තර"), "mother": ("mother", "අම්මා"), "father": ("father", "තාත්තා"),
 }
+
+
+# ─── Never show Hindi letters ───────────────────────────────────────────────
+# Whisper writes Sinhala speech phonetically in Devanagari (see /transcribe).
+# That is only an internal step: anything shown to a patient, caregiver or
+# doctor is converted to Sinhala script. Both scripts are Brahmic, so a letter
+# map gives a readable Sinhala spelling even when the LLM is not available.
+_DEVA_TO_SI = {
+    "अ": "අ", "आ": "ආ", "इ": "ඉ", "ई": "ඊ", "उ": "උ", "ऊ": "ඌ", "ऋ": "ඍ", "ए": "එ", "ऐ": "ඓ", "ओ": "ඔ",
+    "औ": "ඖ", "ऍ": "එ", "ऑ": "ඔ", "ऎ": "එ", "ऒ": "ඔ",
+    "क": "ක", "ख": "ඛ", "ग": "ග", "घ": "ඝ", "ङ": "ඞ", "च": "ච", "छ": "ඡ", "ज": "ජ", "झ": "ඣ", "ञ": "ඤ",
+    "ट": "ට", "ठ": "ඨ", "ड": "ඩ", "ढ": "ඪ", "ण": "ණ", "त": "ත", "थ": "ථ", "द": "ද", "ध": "ධ", "न": "න",
+    "ऩ": "න", "प": "ප", "फ": "ඵ", "ब": "බ", "भ": "භ", "म": "ම", "य": "ය", "र": "ර", "ऱ": "ර", "ल": "ල",
+    "ळ": "ළ", "ऴ": "ළ", "व": "ව", "श": "ශ", "ष": "ෂ", "स": "ස", "ह": "හ",
+    "ा": "ා", "ि": "ි", "ी": "ී", "ु": "ු", "ू": "ූ", "ृ": "ෘ", "े": "ෙ", "ै": "ෛ", "ो": "ො", "ौ": "ෞ",
+    "ॅ": "ෙ", "ॉ": "ො", "ॆ": "ෙ", "ॊ": "ො", "्": "්", "ं": "ං", "ँ": "ං", "ः": "ඃ",
+    "।": ".", "॥": ".", "ऽ": "",
+    **{chr(0x0966 + i): str(i) for i in range(10)},
+}
+
+
+def to_sinhala_script(text):
+    """Devanagari letters -> Sinhala letters; everything else is left as it is."""
+    if not text or not any("ऀ" <= ch <= "ॿ" for ch in text):
+        return text
+    out, i = [], 0
+    while i < len(text):
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < len(text) else ""
+        if nxt == "़":  # nukta: फ़ is 'f' (ෆ); for the others the base letter is close enough
+            out.append("ෆ" if ch == "फ" else _DEVA_TO_SI.get(ch, ch))
+            i += 2
+            continue
+        out.append(_DEVA_TO_SI.get(ch, "" if "ऀ" <= ch <= "ॿ" else ch))
+        i += 1
+    return "".join(out)
+
+
+def no_hindi(value):
+    """to_sinhala_script applied to every string inside a dict / list (LLM output)."""
+    if isinstance(value, str):
+        return to_sinhala_script(value)
+    if isinstance(value, list):
+        return [no_hindi(v) for v in value]
+    if isinstance(value, dict):
+        return {k: no_hindi(v) for k, v in value.items()}
+    return value
 
 
 def si_name(label):
@@ -722,6 +775,7 @@ async def save_person(patient_id: str = Form(...), pending_id: str = Form(...), 
     pending = PENDING_FACES.pop(pending_id, None)
     if not pending or pending["pid"] != patient_id:
         return {"status": "error", "message": "That face capture expired - point the camera at them again"}
+    answer_text, name = to_sinhala_script(answer_text), to_sinhala_script(name)  # stored and shown to the caregiver
 
     if relation:
         # Already interpreted by /transcribe - skip a second LLM call.
@@ -887,6 +941,7 @@ async def check_photo(file: UploadFile = File(...)):
 async def enroll_family(
     patient_id: str = Form(...), pin: str = Form(...), name: str = Form(...),
     relation: str = Form(...), files: list[UploadFile] = File(...),
+    conversation_ok: bool = Form(False),
 ):
     if not _pin_ok(patient_id, pin):
         return {"status": "error", "message": "Caregiver PIN is wrong"}
@@ -926,6 +981,9 @@ async def enroll_family(
         "id": f"per-{uuid.uuid4().hex[:8]}", "name": name.strip() or rel_si, "relation": relation,
         "relation_si": rel_si, "embeddings": consistent, "photo_url": _upload(first_jpeg, "memocare_family"),
         "created": now, "last_seen": None, "times_met": 0, "status": "verified", "enrolled": True,
+        # The family member's consent for visit conversations to be summarised (visit_talk.py).
+        "conversation_ok": bool(conversation_ok),
+        **({"conversation_consent_at": now} if conversation_ok else {}),
     }
     PEOPLE.setdefault(patient_id, []).append(person)
     _save()
@@ -1035,6 +1093,11 @@ async def find_thing(patient_id: str, q: str = "", label: str = ""):
     if not lbl:
         return {"status": "success", "found": False, "say_si": "සමාවෙන්න, ඔබ හොයන්නේ මොකක්ද කියලා තේරුණේ නැහැ. ආයෙත් කියන්න."}
     item = seen.get(lbl)
+    # How often the patient has to ask is itself a memory signal (memory report).
+    log = FIND_LOG.setdefault(patient_id, [])
+    log.append({"time": datetime.datetime.now().isoformat(), "label": lbl, "found": bool(item), "q": q[:80]})
+    FIND_LOG[patient_id] = log[-1000:]
+    _save()
     if not item:
         return {"status": "success", "found": False, "label": lbl,
                 "say_si": f"මම තවම ඔබේ {si_name(lbl)} දැකලා නැහැ. ඒක හම්බුණාම කැමරාවට පෙන්වන්න."}
@@ -1105,7 +1168,8 @@ async def transcribe(file: UploadFile = File(...), lang: str = Form("si"), patie
             'younger sister/grandson/granddaughter/friend/nurse/doctor or empty>", "name": "<person name or empty>"}.\n\n'
             f"Transcription: {heard}")
     except Exception as e:
-        return {"status": "success", "text": heard, "phonetic": heard, "intent": "other", "note": f"LLM failed: {e}"}
+        return {"status": "success", "text": to_sinhala_script(heard), "phonetic": heard, "intent": "other",
+                "note": f"LLM failed: {e}"}
 
     rel = (meaning.get("relation") or "").strip().lower()
     intent = meaning.get("intent", "other")
@@ -1117,13 +1181,15 @@ async def transcribe(file: UploadFile = File(...), lang: str = Form("si"), patie
             intent = "introduce"
     return {
         "status": "success",
-        "text": meaning.get("sinhala") or heard,
+        # "text" and "name" are shown on screen and saved - Sinhala letters only.
+        # "phonetic" is the raw internal transcript (never displayed).
+        "text": to_sinhala_script(meaning.get("sinhala") or heard),
         "phonetic": heard,
         "intent": intent,
         "object": meaning.get("object") if meaning.get("object") in known else "",
         "relation": rel,
         "relation_si": EN_REL_TO_SI.get(rel, ""),
-        "name": (meaning.get("name") or "").strip(),
+        "name": to_sinhala_script((meaning.get("name") or "").strip()),
     }
 
 
@@ -1188,6 +1254,18 @@ def build_story(patient_id, day, lang="si"):
         visits = f", {rec['count']} times today" if rec and rec["count"] > 1 else ""
         name = f" {p['name']}" if p["name"] != p["relation_si"] else ""
         lines.append(f"- you were with your {p['relation_si'] if si else p['relation']}{name}{how_long}{visits}")
+    # What was talked about during visits (only summaries, only with consent - visit_talk.py).
+    talks_for = _ctx.get("conversations_for")
+    for c in (talks_for(patient_id, day) if talks_for else []):
+        p = people_by_id.get(c["person_id"])
+        if not p:
+            continue
+        rel = p["relation_si"] if si else p["relation"]
+        topics = ", ".join(t["si"] if si else t["en"] for t in c.get("topics", []) if t.get("si"))
+        if topics:
+            lines.append(f"- {c['time'][11:16]}: your {rel} talked with you about: {topics}")
+        for pr in c.get("promises", []):
+            lines.append(f"- your {rel} promised: {pr['si'] if si else pr['en']}")
     most_used = sorted((r for r in inter.values() if r["kind"] == "object"), key=lambda r: -r["seconds"])[:1]
     if most_used and len(lines) > 1:
         lines.append(f"- the thing you were with longest today: {most_used[0]['name_si'] if si else most_used[0]['ref']}")
@@ -1201,7 +1279,7 @@ def build_story(patient_id, day, lang="si"):
                 "with dementia, about THEIR OWN day, in second person (\"you\"), like a loving grandchild retelling "
                 "it at bedtime. Mention every event below in time order with its time of day, place, objects and "
                 "people (and how long, if given), then ONE happy closing sentence. Strict rules: never invent "
-                "actions, feelings, food, weather, conversations or anything not written below. Use the object, "
+                "actions, feelings, food, weather, conversations or anything not written below (no quotation marks). Use the object, "
                 "place and relation words exactly as written in the events (do not translate or swap them). "
                 'Short, simple sentences. Reply ONLY with JSON {"title": "<3-5 word title>", "story": "..."}.\n\n'
                 "Events:\n" + "\n".join(lines))

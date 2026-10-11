@@ -1,7 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import {
-  ActivityIndicator, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -10,10 +8,9 @@ import {
   AI_URL, CameraSource, getPatientId, getPatientName, loadCameraSource, saveCameraSource, speak,
 } from '../../../services/memoryAI';
 import {
-  Esp32Art, MapArt, PeopleArt, PhoneCamArt, RememberArt, StoryArt, VoiceArt,
+  Esp32Art, MapArt, PeopleArt, PhoneCamArt, QuizArt, RememberArt, StoryArt, VoiceArt,
 } from './findThings/Illustrations';
-
-const ROOMS = ['Living room', 'Kitchen', 'Bedroom', 'Dining room', 'Bathroom', 'Hallway'];
+import Esp32ConnectSheet, { roomSi } from './findThings/Esp32ConnectSheet';
 
 type Card = {
   key: string;
@@ -29,6 +26,8 @@ type Card = {
 const CARDS: Card[] = [
   { key: 'remember', si: 'මතක තියාගන්න', en: 'Remember my things', hint: 'කැමරාව ඔබේ දේවල් දකිනවා',
     route: '/patient/remember-live', Art: RememberArt, bg: '#eff6ff', accent: '#2563eb' },
+  { key: 'roomcam', si: 'කාමර කැමරාව', en: 'Phone as room camera', hint: '📱 ෆෝන් එක stand එකක තියන්න - තනියම බලනවා',
+    route: '/patient/remember-live?room=1', Art: PhoneCamArt, bg: '#f1f5f9', accent: '#334155' },
   { key: 'voice', si: 'හඬින් හොයන්න', en: 'Find by voice', hint: '"මගේ කෝප්පය කොහෙද?"',
     route: '/patient/find-by-voice', Art: VoiceArt, bg: '#f5f3ff', accent: '#7c3aed' },
   { key: 'map', si: 'දේවල් සිතියම', en: 'Object map', hint: 'දැකපු දේවල් තියෙන තැන්',
@@ -37,6 +36,8 @@ const CARDS: Card[] = [
     route: '/patient/people-met', Art: PeopleArt, bg: '#fff7ed', accent: '#ea580c' },
   { key: 'story', si: 'අද මතක කතාව', en: "Today's memory story", hint: 'ඔබේ දවසේ ලස්සන කතාව',
     route: '/patient/memory-story', Art: StoryArt, bg: '#fdf2f8', accent: '#db2777' },
+  { key: 'quiz', si: 'මතක සෙල්ලම', en: 'Memory game', hint: '🦉 අද දවස ගැන පොඩි කතාබහක්',
+    route: '/patient/memory-quiz', Art: QuizArt, bg: '#FBF5EA', accent: '#2A6F6A' },
   { key: 'family', si: 'පවුලේ අය ලියාපදිංචිය', en: 'Register family (caregiver)', hint: '🔒 Caregiver PIN එකෙන්',
     route: '/patient/family', Art: PeopleArt, bg: '#f0fdfa', accent: '#0f766e' },
 ];
@@ -47,10 +48,7 @@ export default function FindMyThingsScreen() {
   const [cam, setCam] = useState<CameraSource>({ source: 'phone', esp32Ip: '', room: '' });
   const [counts, setCounts] = useState({ things: 0, people: 0 });
   const [espModal, setEspModal] = useState(false);
-  const [ipDraft, setIpDraft] = useState('');
-  const [roomDraft, setRoomDraft] = useState('Living room');
-  const [testing, setTesting] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
-  const [probeInfo, setProbeInfo] = useState('');
+  const [espOnline, setEspOnline] = useState<boolean | null>(null);
   const [passive, setPassive] = useState<{ running: boolean; fps?: number; state?: string; events?: { kind: string; text: string; time: string }[] }>({ running: false });
   const [passiveBusy, setPassiveBusy] = useState(false);
 
@@ -100,7 +98,9 @@ export default function FindMyThingsScreen() {
     useCallback(() => {
       (async () => {
         setName(await getPatientName());
-        setCam(await loadCameraSource());
+        const saved = await loadCameraSource();
+        setCam(saved);
+        if (saved.source === 'esp32') reconnectEsp(saved);
         const pid = await getPatientId();
         if (!pid) return;
         try {
@@ -123,34 +123,30 @@ export default function FindMyThingsScreen() {
     speak('ෆෝන් කැමරාව තෝරා ගත්තා.');
   };
 
-  const openEsp = () => {
-    setIpDraft(cam.esp32Ip);
-    setRoomDraft(cam.room || 'Living room');
-    setTesting('idle');
-    setEspModal(true);
+  // The hotspot gives the camera a new IP after reconnecting - quietly find it
+  // again every time this screen opens, so the saved address is never stale.
+  const reconnectEsp = async (saved: CameraSource) => {
+    setEspOnline(null);
+    try {
+      const res = await axios.get(`${AI_URL}/esp32/discover`, { timeout: 25000 });
+      const cams: { ip: string }[] = res.data.cameras || [];
+      if (!cams.length) return setEspOnline(false);
+      const ip = cams.find((c) => c.ip === saved.esp32Ip)?.ip || cams[0].ip;
+      if (ip !== saved.esp32Ip) {
+        const next = { ...saved, esp32Ip: ip };
+        setCam(next);
+        await saveCameraSource(next);
+      }
+      setEspOnline(true);
+    } catch {
+      setEspOnline(false);
+    }
   };
 
-  const testAndSaveEsp = async () => {
-    const ip = ipDraft.trim();
-    if (!ip) return;
-    setTesting('testing');
-    setProbeInfo('');
-    try {
-      // The AI server (not the phone) talks to the camera, so test from there:
-      // single photo + how fast the live video arrives.
-      const res = await axios.get(`${AI_URL}/esp32/probe`, { params: { ip }, timeout: 20000 });
-      const d = res.data;
-      if (!d.capture_ok && !d.stream_ok) throw new Error(d.capture_error || d.stream_error || 'unreachable');
-      setProbeInfo(d.stream_ok ? `Live video ✓ ${d.stream_fps} fps · photo ${d.frame_kb ?? '?'} KB` : 'Photo ✓ (live video not ready yet)');
-      const next: CameraSource = { source: 'esp32', esp32Ip: ip, room: roomDraft };
-      setCam(next);
-      await saveCameraSource(next);
-      setTesting('ok');
-      speak('ESP32 කැමරාව සම්බන්ධ වුණා.');
-      setTimeout(() => setEspModal(false), 900);
-    } catch {
-      setTesting('fail');
-    }
+  const onEspConnected = async (cfg: CameraSource) => {
+    setCam(cfg);
+    setEspOnline(true);
+    await saveCameraSource(cfg);
   };
 
   return (
@@ -184,10 +180,19 @@ export default function FindMyThingsScreen() {
             <Text style={[s.camText, cam.source === 'phone' && s.camTextOn]}>ෆෝන් එක</Text>
             <Text style={s.camSub}>Phone camera</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[s.camOpt, cam.source === 'esp32' && s.camOptOn]} onPress={openEsp}>
+          <TouchableOpacity style={[s.camOpt, cam.source === 'esp32' && s.camOptOn]} onPress={() => setEspModal(true)}>
             <Esp32Art size={38} />
             <Text style={[s.camText, cam.source === 'esp32' && s.camTextOn]}>ESP32 කැමරාව</Text>
-            <Text style={s.camSub}>{cam.source === 'esp32' && cam.esp32Ip ? cam.esp32Ip : 'Tap to connect'}</Text>
+            {cam.source === 'esp32' ? (
+              <View style={s.espStatus}>
+                <View style={[s.statusDot, { backgroundColor: espOnline === false ? '#ef4444' : espOnline ? '#22c55e' : '#f59e0b' }]} />
+                <Text style={s.camSub}>
+                  {espOnline === false ? 'සම්බන්ධ නැහැ' : espOnline ? roomSi(cam.room) || 'සම්බන්ධයි' : 'හොයනවා...'}
+                </Text>
+              </View>
+            ) : (
+              <Text style={s.camSub}>ඔබන්න - ඉබේම හොයනවා</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -228,50 +233,12 @@ export default function FindMyThingsScreen() {
         ))}
       </ScrollView>
 
-      <Modal visible={espModal} transparent animationType="slide" onRequestClose={() => setEspModal(false)}>
-        <View style={s.modalBg}>
-          <View style={s.sheet}>
-            <View style={s.sheetHead}>
-              <Esp32Art size={44} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.sheetTitle}>ESP32-CAM සම්බන්ධ කරන්න</Text>
-                <Text style={s.sheetSub}>Same Wi-Fi as the AI server</Text>
-              </View>
-              <TouchableOpacity onPress={() => setEspModal(false)}>
-                <Ionicons name="close" size={26} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={s.label}>Camera IP address</Text>
-            <TextInput style={s.input} value={ipDraft} onChangeText={setIpDraft}
-              placeholder="e.g. 172.20.10.6" placeholderTextColor="#94a3b8"
-              keyboardType="numbers-and-punctuation" autoCapitalize="none" />
-
-            <Text style={s.label}>Room it is mounted in</Text>
-            <View style={s.roomWrap}>
-              {ROOMS.map((r) => (
-                <TouchableOpacity key={r} style={[s.room, roomDraft === r && s.roomOn]} onPress={() => setRoomDraft(r)}>
-                  <Text style={[s.roomText, roomDraft === r && { color: '#fff' }]}>{r}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {testing === 'fail' && (
-              <Text style={s.err}>Couldn't reach http://{ipDraft}/capture from the AI server. Check the IP, that the camera is powered, and that the hotspot has "Maximize Compatibility" on.</Text>
-            )}
-            {!!probeInfo && <Text style={s.ok}>{probeInfo}</Text>}
-
-            <TouchableOpacity style={s.connectBtn} onPress={testAndSaveEsp} disabled={testing === 'testing'}>
-              {testing === 'testing' ? <ActivityIndicator color="#fff" /> : (
-                <>
-                  <Ionicons name={testing === 'ok' ? 'checkmark-circle' : 'wifi'} size={20} color="#fff" />
-                  <Text style={s.connectText}>{testing === 'ok' ? 'සම්බන්ධයි!' : 'Test & connect'}</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <Esp32ConnectSheet
+        visible={espModal}
+        current={cam}
+        onClose={() => setEspModal(false)}
+        onConnected={onEspConnected}
+      />
     </SafeAreaView>
   );
 }
@@ -304,24 +271,11 @@ const s = StyleSheet.create({
   cardHint: { fontSize: 13, color: '#64748b', marginTop: 6 },
   go: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
 
-  modalBg: { flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 36 },
-  sheetHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
-  sheetTitle: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
-  sheetSub: { fontSize: 12, color: '#64748b', fontWeight: '600' },
-  label: { fontSize: 13, fontWeight: '800', color: '#475569', marginBottom: 8, marginTop: 6 },
-  input: { borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 14, padding: 14, fontSize: 17, fontWeight: '700', color: '#0f172a', marginBottom: 8 },
-  roomWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  room: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 18, borderWidth: 1.5, borderColor: '#e2e8f0' },
-  roomOn: { backgroundColor: '#0f766e', borderColor: '#0f766e' },
-  roomText: { fontWeight: '700', color: '#475569' },
-  err: { color: '#dc2626', fontWeight: '600', marginBottom: 10 },
-  ok: { color: '#15803d', fontWeight: '800', marginBottom: 10 },
+  espStatus: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
   passiveCard: { backgroundColor: '#fff', borderRadius: 20, padding: 14, marginTop: -12, marginBottom: 22, borderWidth: 2, borderColor: '#99f6e4', gap: 6 },
   passiveHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   passiveTitle: { fontSize: 16, fontWeight: '900', color: '#0f172a' },
   passiveSub: { fontSize: 12, color: '#64748b', fontWeight: '600' },
   passiveEvent: { fontSize: 13, color: '#334155' },
-  connectBtn: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f766e', borderRadius: 18, paddingVertical: 16, marginTop: 6 },
-  connectText: { color: '#fff', fontWeight: '900', fontSize: 16 },
 });
