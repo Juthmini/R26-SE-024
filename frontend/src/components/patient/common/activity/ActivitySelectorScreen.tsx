@@ -73,12 +73,20 @@ export default function ActivitySelectorScreen() {
 
       <View className="px-6 py-6 gap-4">
         <ActivityCard
-          title="මතක කතාව · Memory Vault"
-          subtitle="Your day, as a story"
-          icon="book"
-          iconColor="#db2777"
-          iconBackground="bg-pink-100"
-          onPress={() => router.push("/patient/memory-story" as any)}
+          title="My Daily Routine"
+          subtitle="Your routine guide"
+          icon="checkmark-done-circle"
+          iconColor="#3b82f6"
+          iconBackground="bg-blue-100"
+        />
+
+        <ActivityCard
+          title="Memory Vault"
+          subtitle="Photos & Stories"
+          icon="images"
+          iconColor="#3b82f6"
+          iconBackground="bg-blue-100"
+          onPress={() => router.push("/patient/memory")}
         />
 
         <ActivityCard
@@ -87,7 +95,16 @@ export default function ActivitySelectorScreen() {
           icon="search"
           iconColor="#3b82f6"
           iconBackground="bg-blue-100"
-          onPress={() => router.push("/patient/find-my-things")}
+          onPress={() => router.push("/patient/find-my-things" as any)}
+        />
+
+        <ActivityCard
+          title="මතක කතාව · Memory Story"
+          subtitle="Your day, as a story"
+          icon="book"
+          iconColor="#db2777"
+          iconBackground="bg-pink-100"
+          onPress={() => router.push("/patient/memory-story" as any)}
         />
 
         <ActivityCard

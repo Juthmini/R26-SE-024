@@ -83,18 +83,17 @@ const bulkUploadPatients = async (req, res) => {
 // @desc    Get all patients
 // @route   GET /api/patients
 //
-// Patient identity for this app is the caregiver "Patient" model (collection
-// "patients", src/models/caregiver/Patient.js) - the one real, populated
-// patient registration flow. The old PatientRegistry model this function
-// used to read from (src/models/Patient.js, collection "patientregistries")
-// is confirmed empty and unused, so it's dropped entirely rather than merged
-// in, to avoid carrying two parallel, inconsistent patient identities through
-// every feature built on top of this list (Personal Vault, Find My Things,
-// mobile login all key off these same records now).
+// Returns the admin-registered patients (PatientRegistry) exactly as before,
+// plus patients registered through the caregiver app (caregiver "Patient"
+// model, collection "patients"), which Personal Vault / Find My Things and the
+// mobile login key off. A caregiver patient that shares its _id with a registry
+// record (see seeder/seedDemoPatientIdentity.js) is listed once.
 const getAllPatients = async (req, res) => {
   try {
+    const registry = await Patient.find().sort({ createdAt: -1 });
+    const seen = new Set(registry.map((p) => String(p._id)));
     const rawDocs = await Patient.db.collection('patients').find({}).sort({ createdAt: -1 }).toArray();
-    const patients = rawDocs.map((doc) => {
+    const caregiverPatients = rawDocs.filter((doc) => !seen.has(String(doc._id))).map((doc) => {
       const nameParts = (doc.name || doc.initials || 'Unknown').trim().split(' ');
       return {
         _id: doc._id,
@@ -107,7 +106,7 @@ const getAllPatients = async (req, res) => {
       };
     });
 
-    res.status(200).json({ success: true, data: patients });
+    res.status(200).json({ success: true, data: [...registry, ...caregiverPatients] });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

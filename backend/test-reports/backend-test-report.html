@@ -1,0 +1,277 @@
+<html><head><meta charset="utf-8"/><title>MemoCare Caregiver Portal - Backend Test Report</title><style type="text/css">:root {
+  --text-primary: #111;
+  --text-secondary: #4f4f4f;
+  --success: #006633;
+  --success-bright: #80ffbf;
+  --danger: #cc071e;
+  --danger-bright: #fbdfe0;
+  --warning: #995c00;
+  --warning-bright: #ffeea8;
+  --panel: #eee;
+  --border: #949494;
+  --disabled: #6b6b6b;
+}
+
+html,
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-primary);
+}
+body {
+  padding: 2rem 1rem;
+}
+.jesthtml-content {
+  margin: 0 auto;
+  max-width: 70rem;
+}
+header {
+  display: flex;
+  align-items: center;
+}
+#title {
+  margin: 0;
+  flex-grow: 1;
+}
+#logo {
+  height: 4rem;
+}
+#timestamp {
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+}
+
+#metadata-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.additional-information-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+}
+
+/** SUMMARY */
+#summary {
+  color: var(--text-primary);
+  display: flex;
+  font-family: monospace;
+  font-size: 1rem;
+}
+#summary > div {
+  margin-right: 0.5rem;
+  background: var(--panel);
+  padding: 1rem;
+  min-width: 15rem;
+}
+#summary > div:last-child {
+  margin-right: 0;
+}
+@media only screen and (max-width: 720px) {
+  #summary {
+    flex-direction: column;
+  }
+  #summary > div {
+    margin-right: 0;
+    margin-top: 1rem;
+  }
+  #summary > div:first-child {
+    margin-top: 0;
+  }
+}
+
+.summary-total {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+.summary-passed {
+  color: var(--success);
+  border-left: 0.4rem solid var(--success);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-failed,
+.summary-obsolete-snapshots {
+  color: var(--danger);
+  border-left: 0.4rem solid var(--danger);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-pending {
+  color: var(--warning);
+  border-left: 0.4rem solid var(--warning);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-empty {
+  color: var(--disabled);
+  border-left: 0.4rem solid var(--disabled);
+  margin-bottom: 0.15rem;
+}
+
+.test-result {
+  padding: 1rem;
+  margin-bottom: 0.25rem;
+}
+.test-result:last-child {
+  border: 0;
+}
+.test-result.passed {
+  background-color: var(--success-bright);
+  color: var(--success);
+}
+.test-result.failed {
+  background-color: var(--danger-bright);
+  color: var(--danger);
+}
+.test-result.pending {
+  background-color: var(--warning-bright);
+  color: var(--warning);
+}
+
+.test-info {
+  display: flex;
+  justify-content: space-between;
+}
+.test-suitename {
+  width: 20%;
+  text-align: left;
+  font-weight: bold;
+  word-break: break-word;
+}
+.test-title {
+  width: 40%;
+  text-align: left;
+  font-style: italic;
+}
+.test-status {
+  width: 20%;
+  text-align: right;
+}
+.test-duration {
+  width: 10%;
+  text-align: right;
+  font-size: 0.85rem;
+}
+
+.failureMessages {
+  padding: 0 1rem;
+  margin-top: 1rem;
+  border-top: 1px dashed var(--danger);
+}
+.failureMessages.suiteFailure {
+  border-top: none;
+}
+.failureMsg {
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+
+.suite-container {
+  margin-bottom: 1rem;
+}
+.suite-info {
+  padding: 1rem;
+  background-color: var(--panel);
+  color: var(--text-secondary);
+  border: 0.15rem solid;
+  border-color: var(--panel);
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+.suite-info:hover {
+  border-color: var(--border);
+  cursor: pointer;
+}
+.suite-info .suite-path {
+  word-break: break-all;
+  flex-grow: 1;
+  font-family: monospace;
+  font-size: 1rem;
+}
+.suite-info .suite-time {
+  margin-left: 1rem;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.85rem;
+}
+.suite-info .suite-time.warn {
+  background-color: var(--danger);
+  color: #fff;
+}
+.suite-info:before {
+  content: "\2303";
+  display: inline-block;
+  margin-right: 1rem;
+  transform: rotate(180deg) translateY(0.15rem);
+}
+.suite-container[open] .suite-info:before {
+  transform: rotate(0deg) translateY(0.15rem);
+}
+
+/* CONSOLE LOGS */
+.suite-consolelog {
+  margin-bottom: 0.25rem;
+  padding: 1rem;
+  background-color: var(--panel);
+}
+.suite-consolelog-header {
+  font-weight: bold;
+}
+.suite-consolelog-item {
+  padding: 0.5rem;
+}
+.suite-consolelog-item pre {
+  margin: 0.5rem 0;
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+.suite-consolelog-item-origin {
+  color: var(--text-secondary);
+  font-weight: bold;
+}
+.suite-consolelog-item-message {
+  color: var(--text-primary);
+  font-size: 1rem;
+  padding: 0 0.5rem;
+}
+
+/* OBSOLETE SNAPSHOTS */
+.suite-obsolete-snapshots {
+  margin-bottom: 0.25rem;
+  padding: 1rem;
+  background-color: var(--danger-bright);
+  color: var(--danger);
+}
+.suite-obsolete-snapshots-header {
+  font-weight: bold;
+}
+.suite-obsolete-snapshots-item {
+  padding: 0.5rem;
+}
+.suite-obsolete-snapshots-item pre {
+  margin: 0.5rem 0;
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+.suite-obsolete-snapshots-item-message {
+  color: var(--text-primary);
+  font-size: 1rem;
+  padding: 0 0.5rem;
+}
+</style></head><body><main class="jesthtml-content"><header><h1 id="title">MemoCare Caregiver Portal - Backend Test Report</h1></header><section id="metadata-container"><div id="timestamp">Started: 2026-10-07 16:31:08</div><div id="summary"><div id="suite-summary"><div class="summary-total">Suites (6)</div><div class="summary-passed ">6 passed</div><div class="summary-failed  summary-empty">0 failed</div><div class="summary-pending  summary-empty">0 pending</div></div><div id="test-summary"><div class="summary-total">Tests (70)</div><div class="summary-passed ">70 passed</div><div class="summary-failed  summary-empty">0 failed</div><div class="summary-pending  summary-empty">0 pending</div></div></div></section><details id="suite-1" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\Research\MemoCare-frontend\backend\tests\caregiver\integration\aiCoach.integration.test.js</div><div class="suite-time warn">9.182s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">POST /api/caregiver/ai-coach/personalize</div><div class="test-title">IT-BE-64 requires login (401)</div><div class="test-status">passed</div><div class="test-duration">0.155s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">POST /api/caregiver/ai-coach/personalize</div><div class="test-title">IT-BE-65 caregivers only - a patient gets 403</div><div class="test-status">passed</div><div class="test-duration">0.818s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">POST /api/caregiver/ai-coach/personalize</div><div class="test-title">IT-BE-66 missing stressLevel or recs -&gt; 400</div><div class="test-status">passed</div><div class="test-duration">0.618s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">POST /api/caregiver/ai-coach/personalize</div><div class="test-title">IT-BE-67 returns the personalised message from the (fake) LLM</div><div class="test-status">passed</div><div class="test-duration">0.598s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">POST /api/caregiver/ai-coach/personalize</div><div class="test-title">IT-BE-68 LLM failure -&gt; still success:true with personalized:null (app falls back to rules)</div><div class="test-status">passed</div><div class="test-duration">0.604s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">POST /api/caregiver/ai-coach/personalize</div><div class="test-title">IT-BE-69 no API key configured -&gt; personalized:null and the LLM is never called</div><div class="test-status">passed</div><div class="test-duration">0.686s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">POST /api/caregiver/ai-coach/personalize</div><div class="test-title">IT-BE-70 oversized input is trimmed to 8 recommendations / 3 actions each</div><div class="test-status">passed</div><div class="test-duration">0.665s</div></div></div></div></details><details id="suite-2" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\Research\MemoCare-frontend\backend\tests\caregiver\integration\notifications.integration.test.js</div><div class="suite-time warn">10.887s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Notifications</div><div class="test-title">IT-BE-46 empty list for a new caregiver</div><div class="test-status">passed</div><div class="test-duration">0.886s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Notifications</div><div class="test-title">IT-BE-47 rejects the request without a token (401)</div><div class="test-status">passed</div><div class="test-duration">0.022s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Notifications</div><div class="test-title">IT-BE-48 returns newest first and only MY notifications</div><div class="test-status">passed</div><div class="test-duration">1.233s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Notifications</div><div class="test-title">IT-BE-49 acknowledges one notification</div><div class="test-status">passed</div><div class="test-duration">0.628s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Notifications</div><div class="test-title">IT-BE-50 cannot acknowledge someone else's notification (404)</div><div class="test-status">passed</div><div class="test-duration">1.334s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Notifications</div><div class="test-title">IT-BE-51 acknowledge-all only affects my notifications</div><div class="test-status">passed</div><div class="test-duration">1.673s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Notifications</div><div class="test-title">IT-BE-52 createNotification never throws, even with bad data</div><div class="test-status">passed</div><div class="test-duration">0.01s</div></div></div></div></details><details id="suite-3" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\Research\MemoCare-frontend\backend\tests\caregiver\integration\checkin.integration.test.js</div><div class="suite-time warn">12.274s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Check-in</div><div class="test-title">IT-BE-53 requires caregiverId (400) and does not call the ML service</div><div class="test-status">passed</div><div class="test-duration">0.15s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Check-in</div><div class="test-title">IT-BE-54 saves the check-in with the ML stress result</div><div class="test-status">passed</div><div class="test-duration">0.84s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Check-in</div><div class="test-title">IT-BE-55 sends only the form answers (not caregiverId) to the ML service</div><div class="test-status">passed</div><div class="test-duration">0.639s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Check-in</div><div class="test-title">IT-BE-56 a second check-in on the same day updates, not duplicates</div><div class="test-status">passed</div><div class="test-duration">0.618s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Check-in</div><div class="test-title">IT-BE-57 a High stress result creates a "warning" notification</div><div class="test-status">passed</div><div class="test-duration">0.627s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Check-in</div><div class="test-title">IT-BE-58 a Low stress result creates NO notification</div><div class="test-status">passed</div><div class="test-duration">0.704s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Check-in</div><div class="test-title">IT-BE-59 High WEEKLY burnout creates an "urgent" notification instead of the daily one</div><div class="test-status">passed</div><div class="test-duration">0.657s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Check-in</div><div class="test-title">IT-BE-60 ML service offline -&gt; clear 503 message</div><div class="test-status">passed</div><div class="test-duration">0.869s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Check-in</div><div class="test-title">IT-BE-61 ML returns success:false -&gt; 500 and nothing saved</div><div class="test-status">passed</div><div class="test-duration">0.739s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Check-in</div><div class="test-title">IT-BE-62 GET latest returns the saved result with burnout info</div><div class="test-status">passed</div><div class="test-duration">0.737s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Check-in</div><div class="test-title">IT-BE-63 GET latest with no check-ins returns success:false</div><div class="test-status">passed</div><div class="test-duration">0.667s</div></div></div></div></details><details id="suite-4" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\Research\MemoCare-frontend\backend\tests\caregiver\integration\auth.integration.test.js</div><div class="suite-time warn">12.869s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth</div><div class="test-title">IT-BE-01 registers a caregiver and returns tokens</div><div class="test-status">passed</div><div class="test-duration">0.959s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth</div><div class="test-title">IT-BE-02 rejects an invalid role</div><div class="test-status">passed</div><div class="test-duration">0.026s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth</div><div class="test-title">IT-BE-03 rejects a duplicate email with 409</div><div class="test-status">passed</div><div class="test-duration">0.652s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth</div><div class="test-title">IT-BE-04 logs in with the correct password</div><div class="test-status">passed</div><div class="test-duration">1.187s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth</div><div class="test-title">IT-BE-05 rejects a wrong password with 401</div><div class="test-status">passed</div><div class="test-duration">1.311s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth</div><div class="test-title">IT-BE-06 rejects login with missing fields (400)</div><div class="test-status">passed</div><div class="test-duration">0.014s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth</div><div class="test-title">IT-BE-07 blocks a deactivated account (403)</div><div class="test-status">passed</div><div class="test-duration">1.559s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth</div><div class="test-title">IT-BE-08 password is stored hashed, never as plain text</div><div class="test-status">passed</div><div class="test-duration">0.776s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Route protection (JWT + roles)</div><div class="test-title">IT-BE-09 no token -&gt; 401</div><div class="test-status">passed</div><div class="test-duration">0.015s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Route protection (JWT + roles)</div><div class="test-title">IT-BE-10 garbage token -&gt; 401</div><div class="test-status">passed</div><div class="test-duration">0.014s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Route protection (JWT + roles)</div><div class="test-title">IT-BE-11 a patient account cannot use caregiver routes -&gt; 403</div><div class="test-status">passed</div><div class="test-duration">0.629s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Route protection (JWT + roles)</div><div class="test-title">IT-BE-12 GET /api/auth/me returns the logged-in user</div><div class="test-status">passed</div><div class="test-duration">0.721s</div></div></div></div></details><details id="suite-5" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\Research\MemoCare-frontend\backend\tests\caregiver\integration\tasks.integration.test.js</div><div class="suite-time warn">14.933s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Tasks CRUD</div><div class="test-title">IT-BE-33 creates a task (201), default status todo</div><div class="test-status">passed</div><div class="test-duration">0.834s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Tasks CRUD</div><div class="test-title">IT-BE-34 rejects a task with missing fields (400)</div><div class="test-status">passed</div><div class="test-duration">0.644s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Tasks CRUD</div><div class="test-title">IT-BE-35 lists my tasks with correct counts</div><div class="test-status">passed</div><div class="test-duration">0.621s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Tasks CRUD</div><div class="test-title">IT-BE-36 filters tasks by date</div><div class="test-status">passed</div><div class="test-duration">0.626s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Tasks CRUD</div><div class="test-title">IT-BE-37 never shows another caregiver's tasks</div><div class="test-status">passed</div><div class="test-duration">1.341s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Tasks CRUD</div><div class="test-title">IT-BE-38 toggle flips todo -&gt; done -&gt; todo</div><div class="test-status">passed</div><div class="test-duration">0.915s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Tasks CRUD</div><div class="test-title">IT-BE-39 updates a task</div><div class="test-status">passed</div><div class="test-duration">0.77s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Tasks CRUD</div><div class="test-title">IT-BE-40 deletes a task; deleting again gives 404</div><div class="test-status">passed</div><div class="test-duration">0.774s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Tasks CRUD</div><div class="test-title">IT-BE-41 another caregiver cannot toggle my task (404)</div><div class="test-status">passed</div><div class="test-duration">1.363s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Overdue-task notification</div><div class="test-title">IT-BE-42 a task more than 30 min late creates ONE warning notification</div><div class="test-status">passed</div><div class="test-duration">0.598s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Overdue-task notification</div><div class="test-title">IT-BE-43 a task due in the future creates no notification</div><div class="test-status">passed</div><div class="test-duration">0.432s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Overdue-task notification</div><div class="test-title">IT-BE-44 a completed task never counts as overdue</div><div class="test-status">passed</div><div class="test-duration">0.471s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Overdue-task notification</div><div class="test-title">IT-BE-45 a task with an unreadable time is skipped, not crashed</div><div class="test-status">passed</div><div class="test-duration">0.505s</div></div></div></div></details><details id="suite-6" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\Research\MemoCare-frontend\backend\tests\caregiver\integration\patients.integration.test.js</div><div class="suite-time warn">21.5s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Patients CRUD</div><div class="test-title">IT-BE-13 creates a patient (201) owned by the logged-in caregiver</div><div class="test-status">passed</div><div class="test-duration">0.861s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Patients CRUD</div><div class="test-title">IT-BE-14 rejects a patient with missing required fields (400)</div><div class="test-status">passed</div><div class="test-duration">0.64s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Patients CRUD</div><div class="test-title">IT-BE-15 lists only MY patients, never another caregiver's</div><div class="test-status">passed</div><div class="test-duration">1.168s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Patients CRUD</div><div class="test-title">IT-BE-16 gets one patient by id</div><div class="test-status">passed</div><div class="test-duration">0.725s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Patients CRUD</div><div class="test-title">IT-BE-17 another caregiver cannot read my patient (404)</div><div class="test-status">passed</div><div class="test-duration">1.574s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Patients CRUD</div><div class="test-title">IT-BE-18 updates a patient</div><div class="test-status">passed</div><div class="test-duration">0.762s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Patients CRUD</div><div class="test-title">IT-BE-19 refuses an invalid condition value on update</div><div class="test-status">passed</div><div class="test-duration">0.765s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Patients CRUD</div><div class="test-title">IT-BE-20 deletes a patient</div><div class="test-status">passed</div><div class="test-duration">0.691s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Patients CRUD</div><div class="test-title">IT-BE-21 another caregiver cannot delete my patient (404, record stays)</div><div class="test-status">passed</div><div class="test-duration">1.254s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Routines</div><div class="test-title">IT-BE-22 adds a routine to a patient</div><div class="test-status">passed</div><div class="test-duration">0.436s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Routines</div><div class="test-title">IT-BE-23 rejects a routine without title/time (400)</div><div class="test-status">passed</div><div class="test-duration">0.459s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Routines</div><div class="test-title">IT-BE-24 toggles a routine done and back</div><div class="test-status">passed</div><div class="test-duration">0.539s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Routines</div><div class="test-title">IT-BE-25 deletes a routine</div><div class="test-status">passed</div><div class="test-duration">0.633s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Add registered patient - duplicate protection (bug fix)</div><div class="test-title">IT-BE-26 links a registered patient account to the caregiver</div><div class="test-status">passed</div><div class="test-duration">0.72s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Add registered patient - duplicate protection (bug fix)</div><div class="test-title">IT-BE-27 the same registered patient cannot be added twice (409)</div><div class="test-status">passed</div><div class="test-duration">0.863s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Add registered patient - duplicate protection (bug fix)</div><div class="test-title">IT-BE-28 a second caregiver also cannot add a patient already in the module (409)</div><div class="test-status">passed</div><div class="test-duration">1.023s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Add registered patient - duplicate protection (bug fix)</div><div class="test-title">IT-BE-29 an invalid userId is rejected (400)</div><div class="test-status">passed</div><div class="test-duration">0.424s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Add registered patient - duplicate protection (bug fix)</div><div class="test-title">IT-BE-30 an unknown userId is rejected (404)</div><div class="test-status">passed</div><div class="test-duration">0.528s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Add registered patient - duplicate protection (bug fix)</div><div class="test-title">IT-BE-31 dropdown list hides registered patients already added</div><div class="test-status">passed</div><div class="test-duration">1.523s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Add registered patient - duplicate protection (bug fix)</div><div class="test-title">IT-BE-32 deleting a patient from the module makes them selectable again</div><div class="test-status">passed</div><div class="test-duration">0.966s</div></div></div></div></details></main></body></html>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StatusBar, View } from 'react-native';
 import { router } from 'expo-router';
 
@@ -12,22 +12,32 @@ import { RecentActivity }     from '../../src/components/family/dashboard/Recent
 import {
   getLinkedPatient,
   getDashboardStats,
-  getActiveEngagementAlert,
   getRecentUpdates,
 } from '../../src/services/family/familyService';
+import { getLatestEngagementAlert } from '../../src/services/family/emotionService';
+import { EngagementAlert } from '../../src/types/family.types';
 import { Colors } from '../../src/constants/colors';
 
 export default function FamilyDashboard() {
   const [refreshing, setRefreshing] = useState(false);
+  const [alert, setAlert] = useState<EngagementAlert | null>(null);
 
   const patient      = getLinkedPatient();
   const stats        = getDashboardStats();
-  const alert        = getActiveEngagementAlert();
   const updates      = getRecentUpdates();
+
+  // real mood-change alert from the most recent story-listening session —
+  // a newer session's outcome naturally replaces whatever was shown before
+  const loadAlert = useCallback(async () => {
+    const latest = await getLatestEngagementAlert(patient.id, patient.name);
+    setAlert(latest);
+  }, [patient.id, patient.name]);
+
+  useEffect(() => { loadAlert(); }, [loadAlert]);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1200);
+    loadAlert().finally(() => setRefreshing(false));
   };
 
   return (
@@ -60,7 +70,7 @@ export default function FamilyDashboard() {
         />
 
         {/* ── Smart Alert (Predictive Engagement Engine) ─────────────────────── */}
-        {alert.isActive && (
+        {alert?.isActive && (
           <SmartAlertCard
             alert={alert}
             onCallNow={() => {

@@ -14,8 +14,10 @@ import {
 
 export const getLinkedPatient = (): LinkedPatient => ({
   id: '6a8eb91cb3e48b7f1a6ccc06',   // real MongoDB ObjectId — matches seeded Patient
-  name: 'Margaret Hughes',
-  initials: 'MH',
+                                     // (also seeded into PatientRegistry with
+                                     // the same id, login code PAT-2026-SHAN)
+  name: 'Shan',
+  initials: 'S',
   avatarColor: '#4F8EF7',
   age: 74,
   condition: 'Moderate',
@@ -36,7 +38,7 @@ export const getDashboardStats = (): FamilyDashboardStats => ({
 export const getActiveEngagementAlert = (): EngagementAlert => ({
   id: 'ea-001',
   stage: 3,
-  patientName: 'Margaret',
+  patientName: 'Shan',
   storyTitle: 'The Wedding at Clifton House',
   message: 'The wedding story made her smile. Her mood is up 34%. Call her now while she\'s still in that warm memory.',
   moodShift: 34,
@@ -123,7 +125,7 @@ export const getMessages = (): FamilyMessage[] => [
     id: 'm-001',
     senderId: 'caregiver',
     senderName: 'Nurse Sarah',
-    text: 'Good morning! Margaret had a lovely breakfast and is in great spirits today 😊',
+    text: 'Good morning! Shan had a lovely breakfast and is in great spirits today 😊',
     timestamp: '8:45 AM',
     isRead: true,
   },

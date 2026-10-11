@@ -195,6 +195,14 @@ const createPatient = async (req, res) => {
           message: 'userId must be a valid registered patient id',
         });
       }
+            
+      const alreadyAdded = await Patient.findOne({ registeredPatientId: userId });
+      if (alreadyAdded) {
+        return res.status(409).json({
+          success: false,
+          message: 'This patient has already been added to the Patients module',
+        });
+      }
 
       const registeredPatient = await User.findOne({ _id: userId, role: 'patient' });
       if (!registeredPatient) {
@@ -267,6 +275,13 @@ const deletePatient = async (req, res) => {
     });
     if (!patient) {
       return res.status(404).json({ success: false, message: 'Patient not found' });
+    }
+        // Free the registered patient so they can be added again later
+    if (patient.registeredPatientId) {
+      await User.updateOne(
+        { _id: patient.registeredPatientId, assignedCaregiverId: req.user.userId },
+        { $set: { assignedCaregiverId: null } }
+      );
     }
     res.status(200).json({ success: true, message: 'Patient deleted successfully' });
   } catch (error) {

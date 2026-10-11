@@ -1,7 +1,7 @@
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = `${process.env.EXPO_PUBLIC_API_URL}/api`;
 
 // pick photo from device camera roll
 export const pickPhoto = async () => {

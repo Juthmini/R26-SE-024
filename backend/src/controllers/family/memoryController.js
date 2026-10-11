@@ -3,6 +3,7 @@ const Patient = require('../../models/caregiver/Patient');
 const FamilyPatientProfile = require('../../models/family/FamilyPatientProfile');
 const axios = require('axios');
 const cloudinary = require('../../config/cloudinary');
+const mongoose = require('mongoose');
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL;
 
@@ -39,18 +40,22 @@ const createMemory = async (req, res) => {
       { folder: 'memocare/memories' }
     );
 
-    // call AI service — BLIP-2 + fine-tuned model
+    // call AI service — Kaggle-hosted fine-tuned Llama-3 via localtunnel
+    console.log('Calling AI service at:', AI_SERVICE_URL);
     const aiResponse = await axios.post(
-      `${AI_SERVICE_URL}/generate-from-photo`,
+      `${AI_SERVICE_URL}/generate`,
       {
-        image_base64: imageBase64,
+        photo_desc: 'a special family memory',
         family_note: familyNote,
         patient_name: patient.name,
-        spouse: profile.spouse,
-        children: (profile.children || []).join(', '),
-        hometown: profile.hometown,
+        hometown: profile.hometown || '',
+        tone: 'calm',
+        length: 'short',
       },
-      { timeout: 90000 }
+      {
+        timeout: 60000,
+        headers: { 'bypass-tunnel-reminder': 'true' },
+      }
     );
 
     if (!aiResponse.data.success) {
@@ -62,15 +67,17 @@ const createMemory = async (req, res) => {
 
     const memory = await Memory.create({
       patientId,
-      uploadedBy: req.user ? req.user._id : null,
+      uploadedBy: req.user ? req.user._id : new mongoose.Types.ObjectId(),
       photoUrl: uploadResult.secure_url,
       familyNote,
-      aiPhotoDescription: aiResponse.data.photo_desc,
+      aiPhotoDescription: 'a special family memory',
       generatedStory: aiResponse.data.story,
     });
 
     res.status(201).json({ success: true, memory });
   } catch (error) {
+    console.error('CREATE MEMORY ERROR:', error.message);
+    console.error('Full error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

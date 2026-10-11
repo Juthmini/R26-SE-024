@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -21,6 +22,7 @@ import {
 import { speakStory, stopSpeaking } from '../../src/services/family/ttsService';
 
 export default function StoriesScreen() {
+  const router = useRouter();
   const stories = getMemoryStories();
   const patient = getLinkedPatient();   // gives us patient.id = 'p-001'
 
@@ -72,8 +74,7 @@ export default function StoriesScreen() {
         setGeneratedStory(result.memory.generatedStory);
         setStatus('');
         setVoicePlaying(true);
-        speakStory(result.memory.generatedStory);
-        setTimeout(() => setVoicePlaying(false), 20000);
+        speakStory(result.memory.generatedStory, () => setVoicePlaying(false));
       } else {
         Alert.alert('Error', result.error || 'Could not generate story');
         setStatus('');
@@ -92,8 +93,7 @@ export default function StoriesScreen() {
       setVoicePlaying(false);
     } else {
       setVoicePlaying(true);
-      speakStory(generatedStory);
-      setTimeout(() => setVoicePlaying(false), 20000);
+      speakStory(generatedStory, () => setVoicePlaying(false));
     }
   };
 
@@ -117,6 +117,20 @@ export default function StoriesScreen() {
           <Text style={{ fontSize: 22, fontWeight: '800', color: Colors.textPrimary }}>Memory Stories</Text>
           <Text style={{ fontSize: 14, color: Colors.textMuted, marginTop: 2 }}>AI-narrated stories in a familiar voice</Text>
         </View>
+
+        {/* TEST LINK — jumps to the standalone patient-side listening demo
+            (frontend/app/patient-view-test.tsx). Not part of the teammate's
+            /patient module. Remove once patient-side testing is done. */}
+        <TouchableOpacity
+          onPress={() => router.push('/patient-view-test')}
+          style={{ margin: 20, marginBottom: 0, backgroundColor: '#F0FDF4', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#BBF7D0' }}
+        >
+          <Ionicons name="person-circle-outline" size={22} color="#16a34a" />
+          <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#15803d' }}>
+            Test: Patient Listening View
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color="#16a34a" />
+        </TouchableOpacity>
 
         {/* Explainer card */}
         <View style={{ margin: 20, backgroundColor: Colors.purple + '15', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: Colors.purple + '30' }}>

@@ -1,0 +1,277 @@
+<html><head><meta charset="utf-8"/><title>MemoCare Cognitive Stimulation - Frontend Test Report</title><style type="text/css">:root {
+  --text-primary: #111;
+  --text-secondary: #4f4f4f;
+  --success: #006633;
+  --success-bright: #80ffbf;
+  --danger: #cc071e;
+  --danger-bright: #fbdfe0;
+  --warning: #995c00;
+  --warning-bright: #ffeea8;
+  --panel: #eee;
+  --border: #949494;
+  --disabled: #6b6b6b;
+}
+
+html,
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-primary);
+}
+body {
+  padding: 2rem 1rem;
+}
+.jesthtml-content {
+  margin: 0 auto;
+  max-width: 70rem;
+}
+header {
+  display: flex;
+  align-items: center;
+}
+#title {
+  margin: 0;
+  flex-grow: 1;
+}
+#logo {
+  height: 4rem;
+}
+#timestamp {
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+}
+
+#metadata-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.additional-information-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+}
+
+/** SUMMARY */
+#summary {
+  color: var(--text-primary);
+  display: flex;
+  font-family: monospace;
+  font-size: 1rem;
+}
+#summary > div {
+  margin-right: 0.5rem;
+  background: var(--panel);
+  padding: 1rem;
+  min-width: 15rem;
+}
+#summary > div:last-child {
+  margin-right: 0;
+}
+@media only screen and (max-width: 720px) {
+  #summary {
+    flex-direction: column;
+  }
+  #summary > div {
+    margin-right: 0;
+    margin-top: 1rem;
+  }
+  #summary > div:first-child {
+    margin-top: 0;
+  }
+}
+
+.summary-total {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+.summary-passed {
+  color: var(--success);
+  border-left: 0.4rem solid var(--success);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-failed,
+.summary-obsolete-snapshots {
+  color: var(--danger);
+  border-left: 0.4rem solid var(--danger);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-pending {
+  color: var(--warning);
+  border-left: 0.4rem solid var(--warning);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-empty {
+  color: var(--disabled);
+  border-left: 0.4rem solid var(--disabled);
+  margin-bottom: 0.15rem;
+}
+
+.test-result {
+  padding: 1rem;
+  margin-bottom: 0.25rem;
+}
+.test-result:last-child {
+  border: 0;
+}
+.test-result.passed {
+  background-color: var(--success-bright);
+  color: var(--success);
+}
+.test-result.failed {
+  background-color: var(--danger-bright);
+  color: var(--danger);
+}
+.test-result.pending {
+  background-color: var(--warning-bright);
+  color: var(--warning);
+}
+
+.test-info {
+  display: flex;
+  justify-content: space-between;
+}
+.test-suitename {
+  width: 20%;
+  text-align: left;
+  font-weight: bold;
+  word-break: break-word;
+}
+.test-title {
+  width: 40%;
+  text-align: left;
+  font-style: italic;
+}
+.test-status {
+  width: 20%;
+  text-align: right;
+}
+.test-duration {
+  width: 10%;
+  text-align: right;
+  font-size: 0.85rem;
+}
+
+.failureMessages {
+  padding: 0 1rem;
+  margin-top: 1rem;
+  border-top: 1px dashed var(--danger);
+}
+.failureMessages.suiteFailure {
+  border-top: none;
+}
+.failureMsg {
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+
+.suite-container {
+  margin-bottom: 1rem;
+}
+.suite-info {
+  padding: 1rem;
+  background-color: var(--panel);
+  color: var(--text-secondary);
+  border: 0.15rem solid;
+  border-color: var(--panel);
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+.suite-info:hover {
+  border-color: var(--border);
+  cursor: pointer;
+}
+.suite-info .suite-path {
+  word-break: break-all;
+  flex-grow: 1;
+  font-family: monospace;
+  font-size: 1rem;
+}
+.suite-info .suite-time {
+  margin-left: 1rem;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.85rem;
+}
+.suite-info .suite-time.warn {
+  background-color: var(--danger);
+  color: #fff;
+}
+.suite-info:before {
+  content: "\2303";
+  display: inline-block;
+  margin-right: 1rem;
+  transform: rotate(180deg) translateY(0.15rem);
+}
+.suite-container[open] .suite-info:before {
+  transform: rotate(0deg) translateY(0.15rem);
+}
+
+/* CONSOLE LOGS */
+.suite-consolelog {
+  margin-bottom: 0.25rem;
+  padding: 1rem;
+  background-color: var(--panel);
+}
+.suite-consolelog-header {
+  font-weight: bold;
+}
+.suite-consolelog-item {
+  padding: 0.5rem;
+}
+.suite-consolelog-item pre {
+  margin: 0.5rem 0;
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+.suite-consolelog-item-origin {
+  color: var(--text-secondary);
+  font-weight: bold;
+}
+.suite-consolelog-item-message {
+  color: var(--text-primary);
+  font-size: 1rem;
+  padding: 0 0.5rem;
+}
+
+/* OBSOLETE SNAPSHOTS */
+.suite-obsolete-snapshots {
+  margin-bottom: 0.25rem;
+  padding: 1rem;
+  background-color: var(--danger-bright);
+  color: var(--danger);
+}
+.suite-obsolete-snapshots-header {
+  font-weight: bold;
+}
+.suite-obsolete-snapshots-item {
+  padding: 0.5rem;
+}
+.suite-obsolete-snapshots-item pre {
+  margin: 0.5rem 0;
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+.suite-obsolete-snapshots-item-message {
+  color: var(--text-primary);
+  font-size: 1rem;
+  padding: 0 0.5rem;
+}
+</style></head><body><main class="jesthtml-content"><header><h1 id="title">MemoCare Cognitive Stimulation - Frontend Test Report</h1></header><section id="metadata-container"><div id="timestamp">Started: 2026-10-10 00:17:36</div><div id="summary"><div id="suite-summary"><div class="summary-total">Suites (6)</div><div class="summary-passed ">6 passed</div><div class="summary-failed  summary-empty">0 failed</div><div class="summary-pending  summary-empty">0 pending</div></div><div id="test-summary"><div class="summary-total">Tests (30)</div><div class="summary-passed ">30 passed</div><div class="summary-failed  summary-empty">0 failed</div><div class="summary-pending  summary-empty">0 pending</div></div></div></section><details id="suite-1" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\myProjects\MemoCare\frontend\tests\cognitive-games\component\DifficultyBadge.test.tsx</div><div class="suite-time warn">13.92s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">DifficultyBadge</div><div class="test-title">CT-FE-01 shows "Easy" for the easy level</div><div class="test-status">passed</div><div class="test-duration">0.033s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">DifficultyBadge</div><div class="test-title">CT-FE-02 shows "Medium" for the medium level</div><div class="test-status">passed</div><div class="test-duration">0.005s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">DifficultyBadge</div><div class="test-title">CT-FE-03 shows "Hard" for the hard level and shows only that label</div><div class="test-status">passed</div><div class="test-duration">0.005s</div></div></div></div></details><details id="suite-2" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\myProjects\MemoCare\frontend\tests\cognitive-games\component\DifficultyChangeBanner.test.tsx</div><div class="suite-time warn">13.966s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">DifficultyChangeBanner</div><div class="test-title">CT-FE-04 renders nothing when there is no progress update (save failed or offline)</div><div class="test-status">passed</div><div class="test-duration">0.049s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">DifficultyChangeBanner</div><div class="test-title">CT-FE-05 renders nothing when the level did not change</div><div class="test-status">passed</div><div class="test-duration">0.003s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">DifficultyChangeBanner</div><div class="test-title">CT-FE-06 a level-up shows "Difficulty increased!", the old and new level and the reason</div><div class="test-status">passed</div><div class="test-duration">0.018s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">DifficultyChangeBanner</div><div class="test-title">CT-FE-07 a level-down is worded gently ("Difficulty adjusted") with a down arrow</div><div class="test-status">passed</div><div class="test-duration">0.006s</div></div></div></div></details><details id="suite-3" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\myProjects\MemoCare\frontend\tests\cognitive-games\component\GameHeader.test.tsx</div><div class="suite-time warn">19.165s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">GameHeader</div><div class="test-title">CT-FE-08 shows the game title and the current difficulty badge</div><div class="test-status">passed</div><div class="test-duration">4.832s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">GameHeader</div><div class="test-title">CT-FE-09 the back button calls onBack (or onExit), and falls back to router.back()</div><div class="test-status">passed</div><div class="test-duration">0.046s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">GameHeader</div><div class="test-title">CT-FE-10 shows the countdown only for timed games (ring label with a total, "&lt;n&gt;s" without)</div><div class="test-status">passed</div><div class="test-duration">0.026s</div></div></div></div></details><details id="suite-4" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\myProjects\MemoCare\frontend\tests\cognitive-games\component\InstructionScreen.test.tsx</div><div class="suite-time warn">20.78s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">InstructionScreen</div><div class="test-title">CT-FE-11 shows the game title, description and every numbered step</div><div class="test-status">passed</div><div class="test-duration">6.698s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">InstructionScreen</div><div class="test-title">CT-FE-12 pressing Start calls onStart and stops any speech</div><div class="test-status">passed</div><div class="test-duration">0.042s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">InstructionScreen</div><div class="test-title">CT-FE-13 while content is loading the Start button is disabled and shows the custom label</div><div class="test-status">passed</div><div class="test-duration">0.012s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">InstructionScreen</div><div class="test-title">CT-FE-14 "Listen to Instructions" reads the title and steps aloud, then toggles to "Stop"</div><div class="test-status">passed</div><div class="test-duration">0.08s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">InstructionScreen</div><div class="test-title">CT-FE-15 Back calls onBack (else router.back) and the optional secondary action works</div><div class="test-status">passed</div><div class="test-duration">0.062s</div></div></div></div></details><details id="suite-5" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\myProjects\MemoCare\frontend\tests\cognitive-games\component\GameResultScreen.test.tsx</div><div class="suite-time warn">21.891s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">GameResultScreen</div><div class="test-title">CT-FE-16 a score of 60% or more celebrates: "Well done!", "Passed", score, time and accuracy</div><div class="test-status">passed</div><div class="test-duration">4.826s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">GameResultScreen</div><div class="test-title">CT-FE-17 a score below 60% is encouraging, not discouraging: "Keep trying!" / "Not passed yet"</div><div class="test-status">passed</div><div class="test-duration">0.044s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">GameResultScreen</div><div class="test-title">CT-FE-18 Play Again calls onPlayAgain once, then shows "Preparing…" and ignores double taps</div><div class="test-status">passed</div><div class="test-duration">2.691s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">GameResultScreen</div><div class="test-title">CT-FE-19 Back to Games calls onBack, or goes to /patient/games when none is given</div><div class="test-status">passed</div><div class="test-duration">0.026s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">GameResultScreen</div><div class="test-title">CT-FE-20 shows the difficulty-change banner only when the level actually changed</div><div class="test-status">passed</div><div class="test-duration">0.029s</div></div></div></div></details><details id="suite-6" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\myProjects\MemoCare\frontend\tests\cognitive-games\component\FaqQuestionnaire.test.tsx</div><div class="suite-time warn">25.969s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">FaqQuestionnaire</div><div class="test-title">FAQ-01 starts on a friendly intro and Start opens question 1 of 10</div><div class="test-status">passed</div><div class="test-duration">6.712s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">FaqQuestionnaire</div><div class="test-title">FAQ-02 every question offers the same four plain-English answers</div><div class="test-status">passed</div><div class="test-duration">0.071s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">FaqQuestionnaire</div><div class="test-title">FAQ-03 picking an answer moves on to the next question by itself</div><div class="test-status">passed</div><div class="test-duration">1.199s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">FaqQuestionnaire</div><div class="test-title">FAQ-04 Back returns to the previous question and keeps its answer selected</div><div class="test-status">passed</div><div class="test-duration">0.094s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">FaqQuestionnaire</div><div class="test-title">FAQ-05 Next stays disabled until the current question is answered</div><div class="test-status">passed</div><div class="test-duration">0.043s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">FaqQuestionnaire</div><div class="test-title">FAQ-06 "Read it to me" speaks the question, examples and all four choices; second tap stops</div><div class="test-status">passed</div><div class="test-duration">0.078s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">FaqQuestionnaire</div><div class="test-title">FAQ-07 after 10 answers a review screen lists them all and submits exactly the 10 model keys (0-3)</div><div class="test-status">passed</div><div class="test-duration">0.454s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">FaqQuestionnaire</div><div class="test-title">FAQ-08 from the review screen an answer can be changed and it returns straight to the review</div><div class="test-status">passed</div><div class="test-duration">0.421s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">FaqQuestionnaire</div><div class="test-title">FAQ-09 while saving the submit button is busy, and a save error is shown in plain words</div><div class="test-status">passed</div><div class="test-duration">2.98s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">FaqQuestionnaire</div><div class="test-title">FAQ-10 the Close button appears only when onClose is supplied (modal use) and calls it</div><div class="test-status">passed</div><div class="test-duration">0.031s</div></div></div></div></details></main></body></html>

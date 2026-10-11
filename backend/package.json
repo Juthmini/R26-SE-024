@@ -12,7 +12,17 @@
     "test:unit": "node --test \"tests/unit/**/*.test.js\"",
     "test:integration": "node --test \"tests/integration/*.test.js\"",
     "seed:questions": "node src/seeder/seedQuestions.js",
-    "seed:images": "node src/seeder/seedGameImages.js"
+    "seed:images": "node src/seeder/seedGameImages.js",
+    "seed:demo-patient": "node src/seeder/seedDemoPatientIdentity.js",
+  "test:cg": "jest --config jest.caregiver.config.js",
+  "test:cg:unit": "jest --config jest.caregiver.config.js tests/caregiver/unit",
+  "test:cg:integration": "jest --config jest.caregiver.config.js tests/caregiver/integration",
+  "test:cg:system": "jest --config jest.caregiver.config.js tests/caregiver/system",
+  "test:cg:coverage": "jest --config jest.caregiver.config.js --coverage",
+    "test:games": "jest --config jest.cognitive-games.config.js",
+    "test:games:unit": "jest --config jest.cognitive-games.config.js tests/cognitive-games/unit",
+    "test:games:integration": "jest --config jest.cognitive-games.config.js tests/cognitive-games/integration --runInBand",
+    "test:games:coverage": "jest --config jest.cognitive-games.config.js --coverage"
   },
   "keywords": [],
   "author": "",
@@ -30,7 +40,7 @@
     "dotenv": "^17.4.1",
     "express": "^5.2.1",
     "express-validator": "^7.3.2",
-    "form-data": "^4.0.5",
+    "form-data": "^4.0.6",
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^7.1.1",
     "mongoose": "^9.4.1",
@@ -42,6 +52,10 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
-    "nodemon": "^3.1.14"
+    "jest": "^29.7.0",
+    "jest-html-reporter": "^4.4.2",
+    "mongodb-memory-server": "^11.3.0",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.3.1"
   }
 }

@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React from 'react';
-import { ScrollView, StatusBar, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ScrollView, Share, StatusBar, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '../../src/constants/colors';
 import { getLinkedPatient } from '../../src/services/family/familyService';
+import { buildShareableReport, getMemorySessionReports, MemorySessionReport } from '../../src/services/family/emotionService';
 
 const routineItems = [
   { time: '8:00 AM',  task: 'Morning medication',    done: true,  icon: 'medical' },
@@ -16,6 +17,23 @@ const routineItems = [
 
 export default function PatientScreen() {
   const patient = getLinkedPatient();
+  const [reports, setReports] = useState<MemorySessionReport[]>([]);
+  const [loadingReports, setLoadingReports] = useState(true);
+
+  useEffect(() => {
+    getMemorySessionReports(patient.id)
+      .then(setReports)
+      .finally(() => setLoadingReports(false));
+  }, [patient.id]);
+
+  const shareReport = async (single?: MemorySessionReport) => {
+    const text = buildShareableReport(patient.name, single ? [single] : reports);
+    try {
+      await Share.share({ message: text });
+    } catch {
+      // user cancelled the share sheet — nothing to do
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -65,6 +83,52 @@ export default function PatientScreen() {
               );
             })}
           </View>
+        </View>
+
+        {/* Memory Session Reports — real data, shareable with a caregiver */}
+        <View style={{ marginHorizontal: 20, marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textMuted, letterSpacing: 0.5 }}>MEMORY SESSION REPORTS</Text>
+            {reports.length > 0 && (
+              <TouchableOpacity
+                onPress={() => shareReport()}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.primaryLight, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 }}
+              >
+                <Ionicons name="share-social-outline" size={13} color={Colors.primary} />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.primary }}>Share All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {loadingReports ? (
+            <Text style={{ fontSize: 12, color: Colors.textMuted, paddingVertical: 12 }}>Loading...</Text>
+          ) : reports.length === 0 ? (
+            <View style={{ backgroundColor: Colors.white, borderRadius: 20, padding: 20, alignItems: 'center' }}>
+              <Ionicons name="mic-off-outline" size={28} color={Colors.textMuted} />
+              <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 8, textAlign: 'center' }}>
+                No memory sessions recorded yet. Once {patient.name} listens to a story, the mood results will appear here.
+              </Text>
+            </View>
+          ) : (
+            <View style={{ backgroundColor: Colors.white, borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
+              {reports.map((r, i) => (
+                <View key={r.id}>
+                  {i > 0 && <View style={{ height: 1, backgroundColor: Colors.borderLight, marginHorizontal: 16 }} />}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textPrimary }} numberOfLines={1}>{r.storyTitle}</Text>
+                      <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 2 }}>
+                        {r.date} · {r.baselineEmotion} → {r.finalEmotion} · {r.moodShiftPercent > 0 ? '+' : ''}{r.moodShiftPercent}%
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => shareReport(r)} style={{ padding: 6 }}>
+                      <Ionicons name="share-outline" size={18} color={Colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Daily Routine */}
