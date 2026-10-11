@@ -104,6 +104,39 @@ export function QuizArt({ size = 96 }: Props) {
   );
 }
 
+export function RoomCamArt({ size = 96 }: Props) {
+  // A phone standing on a little tripod, watching the room at night.
+  return (
+    <Svg width={size} height={size} viewBox="0 0 120 120">
+      <Circle cx="60" cy="60" r="56" fill="#E2E8F0" />
+      <Path d="M86 26 a14 14 0 1 0 10 24 a11 11 0 1 1 -10 -24z" fill="#FCD34D" />
+      <Circle cx="30" cy="30" r="2" fill="#94A3B8" />
+      <Circle cx="40" cy="20" r="1.5" fill="#94A3B8" />
+      <Rect x="40" y="30" width="40" height="60" rx="8" fill="#0F172A" />
+      <Rect x="44" y="36" width="32" height="46" rx="4" fill="#1E293B" />
+      <Circle cx="60" cy="54" r="9" fill="#334155" />
+      <Circle cx="60" cy="54" r="5" fill="#38BDF8" />
+      <Circle cx="70" cy="40" r="2.5" fill="#22C55E" />
+      <Path d="M60 90 L60 100 M60 100 L44 110 M60 100 L76 110 M60 100 L60 110" stroke="#475569" strokeWidth="4" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function FamilyArt({ size = 96 }: Props) {
+  // Family faces protected by a shield (caregiver-only registration).
+  return (
+    <Svg width={size} height={size} viewBox="0 0 120 120">
+      <Circle cx="60" cy="60" r="56" fill="#CCFBF1" />
+      <Circle cx="40" cy="48" r="12" fill="#FDBA74" />
+      <Path d="M20 88 c0 -16 9 -24 20 -24 s20 8 20 24z" fill="#14B8A6" />
+      <Circle cx="68" cy="44" r="11" fill="#FCD34D" />
+      <Path d="M50 84 c0 -14 8 -21 18 -21 s18 7 18 21z" fill="#0D9488" />
+      <Path d="M88 58 l16 6 v12 c0 11 -7 18 -16 22 c-9 -4 -16 -11 -16 -22 v-12z" fill="#0F766E" stroke="#fff" strokeWidth="3" />
+      <Path d="M81 77 l5 5 l9 -10" stroke="#fff" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 export function PhoneCamArt({ size = 40 }: Props) {
   return (
     <Svg width={size} height={size} viewBox="0 0 48 48">

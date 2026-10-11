@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import axios from 'axios';
@@ -8,8 +9,9 @@ import {
   AI_URL, CameraSource, getPatientId, getPatientName, loadCameraSource, saveCameraSource, speak,
 } from '../../../services/memoryAI';
 import {
-  Esp32Art, MapArt, PeopleArt, PhoneCamArt, QuizArt, RememberArt, StoryArt, VoiceArt,
+  Esp32Art, FamilyArt, MapArt, PeopleArt, PhoneCamArt, QuizArt, RememberArt, RoomCamArt, StoryArt, VoiceArt,
 } from './findThings/Illustrations';
+import HeroScene, { dayPart } from './findThings/HeroScene';
 import Esp32ConnectSheet, { roomSi } from './findThings/Esp32ConnectSheet';
 
 type Card = {
@@ -24,26 +26,28 @@ type Card = {
 };
 
 const CARDS: Card[] = [
-  { key: 'remember', si: 'මතක තියාගන්න', en: 'Remember my things', hint: 'කැමරාව ඔබේ දේවල් දකිනවා',
+  { key: 'remember', si: 'මතක තියාගන්න', en: 'Remember things', hint: 'කැමරාව ඔබේ දේවල් දකිනවා',
     route: '/patient/remember-live', Art: RememberArt, bg: '#eff6ff', accent: '#2563eb' },
-  { key: 'roomcam', si: 'කාමර කැමරාව', en: 'Phone as room camera', hint: '📱 ෆෝන් එක stand එකක තියන්න - තනියම බලනවා',
-    route: '/patient/remember-live?room=1', Art: PhoneCamArt, bg: '#f1f5f9', accent: '#334155' },
+  { key: 'roomcam', si: 'කාමර කැමරාව', en: 'Room camera', hint: '📱 ෆෝන් එක stand එකක තියන්න - තනියම බලනවා',
+    route: '/patient/remember-live?room=1', Art: RoomCamArt, bg: '#f1f5f9', accent: '#334155' },
   { key: 'voice', si: 'හඬින් හොයන්න', en: 'Find by voice', hint: '"මගේ කෝප්පය කොහෙද?"',
     route: '/patient/find-by-voice', Art: VoiceArt, bg: '#f5f3ff', accent: '#7c3aed' },
   { key: 'map', si: 'දේවල් සිතියම', en: 'Object map', hint: 'දැකපු දේවල් තියෙන තැන්',
     route: '/patient/things-map', Art: MapArt, bg: '#f0fdf4', accent: '#16a34a' },
   { key: 'people', si: 'මට හමුවූ අය', en: 'People I met', hint: 'පවුලේ අය සහ යාළුවෝ',
     route: '/patient/people-met', Art: PeopleArt, bg: '#fff7ed', accent: '#ea580c' },
-  { key: 'story', si: 'අද මතක කතාව', en: "Today's memory story", hint: 'ඔබේ දවසේ ලස්සන කතාව',
+  { key: 'story', si: 'අද මතක කතාව', en: 'Memory story', hint: 'ඔබේ දවසේ ලස්සන කතාව',
     route: '/patient/memory-story', Art: StoryArt, bg: '#fdf2f8', accent: '#db2777' },
   { key: 'quiz', si: 'මතක සෙල්ලම', en: 'Memory game', hint: '🦉 අද දවස ගැන පොඩි කතාබහක්',
     route: '/patient/memory-quiz', Art: QuizArt, bg: '#FBF5EA', accent: '#2A6F6A' },
-  { key: 'family', si: 'පවුලේ අය ලියාපදිංචිය', en: 'Register family (caregiver)', hint: '🔒 Caregiver PIN එකෙන්',
-    route: '/patient/family', Art: PeopleArt, bg: '#f0fdfa', accent: '#0f766e' },
+  { key: 'family', si: 'පවුලේ අය', en: 'Family · caregiver 🔒', hint: '🔒 Caregiver PIN එකෙන්',
+    route: '/patient/family', Art: FamilyArt, bg: '#f0fdfa', accent: '#0f766e' },
 ];
 
 export default function FindMyThingsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [name, setName] = useState('');
   const [cam, setCam] = useState<CameraSource>({ source: 'phone', esp32Ip: '', room: '' });
   const [counts, setCounts] = useState({ things: 0, people: 0 });
@@ -149,88 +153,113 @@ export default function FindMyThingsScreen() {
     await saveCameraSource(cfg);
   };
 
+  const part = dayPart();
+  const greeting = { morning: 'සුභ උදෑසනක්', day: 'සුභ දහවලක්', evening: 'සුභ සන්ධ්‍යාවක්', night: 'සුභ රාත්‍රියක්' }[part];
+  const heroH = 300 + insets.top;
+  const camLabel = cam.source === 'esp32' ? `ESP32${cam.room ? ` · ${roomSi(cam.room)}` : ''}` : 'ෆෝන් කැමරාව';
+
   return (
-    <SafeAreaView style={s.container}>
+    <View style={s.container}>
+      <StatusBar style="light" />
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        <View style={s.header}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#0f172a" />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }}>
-            <Text style={s.title}>මගේ දේවල්</Text>
-            <Text style={s.subtitle}>Find My Things{name ? ` · ${name}` : ''}</Text>
-          </View>
-        </View>
-
-        <View style={s.statsRow}>
-          <View style={s.stat}>
-            <Text style={s.statNum}>{counts.things}</Text>
-            <Text style={s.statLbl}>මතක දේවල්</Text>
-          </View>
-          <View style={s.stat}>
-            <Text style={s.statNum}>{counts.people}</Text>
-            <Text style={s.statLbl}>හඳුනන අය</Text>
-          </View>
-        </View>
-
-        <Text style={s.section}>කැමරාව · Camera</Text>
-        <View style={s.camRow}>
-          <TouchableOpacity style={[s.camOpt, cam.source === 'phone' && s.camOptOn]} onPress={choosePhone}>
-            <PhoneCamArt size={38} />
-            <Text style={[s.camText, cam.source === 'phone' && s.camTextOn]}>ෆෝන් එක</Text>
-            <Text style={s.camSub}>Phone camera</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.camOpt, cam.source === 'esp32' && s.camOptOn]} onPress={() => setEspModal(true)}>
-            <Esp32Art size={38} />
-            <Text style={[s.camText, cam.source === 'esp32' && s.camTextOn]}>ESP32 කැමරාව</Text>
-            {cam.source === 'esp32' ? (
-              <View style={s.espStatus}>
-                <View style={[s.statusDot, { backgroundColor: espOnline === false ? '#ef4444' : espOnline ? '#22c55e' : '#f59e0b' }]} />
-                <Text style={s.camSub}>
-                  {espOnline === false ? 'සම්බන්ධ නැහැ' : espOnline ? roomSi(cam.room) || 'සම්බන්ධයි' : 'හොයනවා...'}
-                </Text>
-              </View>
-            ) : (
-              <Text style={s.camSub}>ඔබන්න - ඉබේම හොයනවා</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {cam.source === 'esp32' && !!cam.esp32Ip && (
-          <View style={s.passiveCard}>
-            <View style={s.passiveHead}>
-              <Ionicons name="radio" size={22} color={passive.running ? '#16a34a' : '#64748b'} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.passiveTitle}>දවස පුරා තනියම බලන්න</Text>
-                <Text style={s.passiveSub}>
-                  {passive.running
-                    ? `${passive.state || 'running'}${passive.fps ? ` · ${passive.fps} fps` : ''}`
-                    : 'Passive mode - phone can be closed'}
-                </Text>
-              </View>
-              <Switch value={!!passive.running} onValueChange={togglePassive} disabled={passiveBusy} />
+        {/* ── Hero ─────────────────────────────────────────────── */}
+        <View style={{ height: heroH }}>
+          <HeroScene width={width} height={heroH} part={part} bg={BG} />
+          <View style={[s.heroContent, { paddingTop: insets.top + 10 }]}>
+            <View style={s.heroTop}>
+              <TouchableOpacity onPress={() => router.back()} style={s.glassBtn} hitSlop={8}>
+                <Ionicons name="chevron-back" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/patient/memory-quiz' as any)} style={s.glassBtn} hitSlop={8}>
+                <Text style={{ fontSize: 20 }}>🦉</Text>
+              </TouchableOpacity>
             </View>
-            {passive.running && (passive.events || []).slice(0, 3).map((e, i) => (
-              <Text key={`${e.time}-${i}`} style={s.passiveEvent} numberOfLines={2}>• {e.text}</Text>
+            <Text style={s.hello}>{greeting},</Text>
+            <Text style={s.helloName} numberOfLines={2}>{name || 'ආදරණීය ඔබට'}</Text>
+            <View style={s.chipRow}>
+              <View style={s.glassChip}>
+                <Ionicons name="sparkles" size={15} color="#fff" />
+                <Text style={s.glassChipText}>Memory Vault · {camLabel}</Text>
+              </View>
+            </View>
+            <View style={s.chipRow}>
+              <View style={s.glassChipSm}>
+                <Text style={s.glassChipNum}>{counts.things}</Text>
+                <Text style={s.glassChipText}>මතක දේවල්</Text>
+              </View>
+              <View style={s.glassChipSm}>
+                <Text style={s.glassChipNum}>{counts.people}</Text>
+                <Text style={s.glassChipText}>හඳුනන අය</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={s.body}>
+          {/* ── Camera ───────────────────────────────────────── */}
+          <Text style={s.section}>කැමරාව</Text>
+          <View style={s.camRow}>
+            <TouchableOpacity style={[s.camOpt, cam.source === 'phone' && s.camOptOn]} onPress={choosePhone} activeOpacity={0.85}>
+              <View style={s.camTile}><PhoneCamArt size={40} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.camText}>ෆෝන් එක</Text>
+                <Text style={s.camSub}>Phone camera</Text>
+              </View>
+              {cam.source === 'phone' && <Ionicons name="checkmark-circle" size={22} color={ACCENT} />}
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.camOpt, cam.source === 'esp32' && s.camOptOn]} onPress={() => setEspModal(true)} activeOpacity={0.85}>
+              <View style={s.camTile}><Esp32Art size={40} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.camText}>ESP32</Text>
+                {cam.source === 'esp32' ? (
+                  <View style={s.espStatus}>
+                    <View style={[s.statusDot, { backgroundColor: espOnline === false ? '#ef4444' : espOnline ? '#22c55e' : '#f59e0b' }]} />
+                    <Text style={s.camSub} numberOfLines={1}>
+                      {espOnline === false ? 'සම්බන්ධ නැහැ' : espOnline ? roomSi(cam.room) || 'සම්බන්ධයි' : 'හොයනවා...'}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={s.camSub}>ඔබන්න - ඉබේම හොයනවා</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {cam.source === 'esp32' && !!cam.esp32Ip && (
+            <View style={s.passiveCard}>
+              <View style={s.passiveHead}>
+                <Ionicons name="radio" size={22} color={passive.running ? '#4ade80' : '#94a3b8'} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.passiveTitle}>දවස පුරා තනියම බලන්න</Text>
+                  <Text style={s.passiveSub}>
+                    {passive.running
+                      ? `${passive.state || 'running'}${passive.fps ? ` · ${passive.fps} fps` : ''}`
+                      : 'Passive mode - phone can be closed'}
+                  </Text>
+                </View>
+                <Switch value={!!passive.running} onValueChange={togglePassive} disabled={passiveBusy}
+                  trackColor={{ true: ACCENT, false: '#334155' }} />
+              </View>
+              {passive.running && (passive.events || []).slice(0, 3).map((e, i) => (
+                <Text key={`${e.time}-${i}`} style={s.passiveEvent} numberOfLines={2}>• {e.text}</Text>
+              ))}
+            </View>
+          )}
+
+          {/* ── Menu ─────────────────────────────────────────── */}
+          <Text style={s.section}>මගේ මතක උදව්</Text>
+          <View style={s.grid}>
+            {CARDS.map(({ key, si, en, route, Art, bg }) => (
+              <TouchableOpacity key={key} style={s.card} activeOpacity={0.85} onPress={() => router.push(route as any)}>
+                <View style={[s.tile, { backgroundColor: bg }]}>
+                  <Art size={96} />
+                </View>
+                <Text style={s.cardSi} numberOfLines={2}>{si}</Text>
+                <Text style={s.cardEn} numberOfLines={1}>{en}</Text>
+              </TouchableOpacity>
             ))}
           </View>
-        )}
-
-        <Text style={s.section}>මොකක්ද කරන්න ඕනේ?</Text>
-        {CARDS.map(({ key, si, en, hint, route, Art, bg, accent }) => (
-          <TouchableOpacity key={key} style={[s.card, { backgroundColor: bg }]} activeOpacity={0.85}
-            onPress={() => router.push(route as any)}>
-            <Art size={84} />
-            <View style={s.cardBody}>
-              <Text style={[s.cardSi, { color: accent }]}>{si}</Text>
-              <Text style={s.cardEn}>{en}</Text>
-              <Text style={s.cardHint}>{hint}</Text>
-            </View>
-            <View style={[s.go, { backgroundColor: accent }]}>
-              <Ionicons name="chevron-forward" size={22} color="#fff" />
-            </View>
-          </TouchableOpacity>
-        ))}
+        </View>
       </ScrollView>
 
       <Esp32ConnectSheet
@@ -239,43 +268,57 @@ export default function FindMyThingsScreen() {
         onClose={() => setEspModal(false)}
         onConnected={onEspConnected}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
+const BG = '#13251F';      // deep evergreen page
+const CARD = '#1D2B3A';    // slate-navy cards
+const ACCENT = '#2DD4BF';
+
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  scroll: { padding: 20, paddingBottom: 48 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 18 },
-  backBtn: { width: 46, height: 46, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
-  title: { fontSize: 28, fontWeight: '900', color: '#0f172a' },
-  subtitle: { fontSize: 14, color: '#64748b', fontWeight: '600' },
+  container: { flex: 1, backgroundColor: BG },
+  scroll: { paddingBottom: 48 },
 
-  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 22 },
-  stat: { flex: 1, backgroundColor: '#0f172a', borderRadius: 20, paddingVertical: 14, alignItems: 'center' },
-  statNum: { color: '#fff', fontSize: 26, fontWeight: '900' },
-  statLbl: { color: '#94a3b8', fontSize: 13, fontWeight: '700' },
+  heroContent: { position: 'absolute', left: 0, right: 0, top: 0, paddingHorizontal: 22 },
+  heroTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
+  glassBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center',
+    justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)' },
+  hello: { color: '#fff', fontSize: 28, fontWeight: '800', textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
+  helloName: { color: '#fff', fontSize: 30, fontWeight: '900', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
+  chipRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  glassChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
+  glassChipSm: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(15,23,42,0.35)',
+    borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
+  glassChipText: { color: '#fff', fontSize: 13.5, fontWeight: '700' },
+  glassChipNum: { color: '#fff', fontSize: 15, fontWeight: '900' },
 
-  section: { fontSize: 16, fontWeight: '900', color: '#334155', marginBottom: 12 },
-  camRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  camOpt: { flex: 1, backgroundColor: '#fff', borderRadius: 20, padding: 14, alignItems: 'center', borderWidth: 2, borderColor: '#e2e8f0', gap: 4 },
-  camOptOn: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
-  camText: { fontSize: 15, fontWeight: '800', color: '#334155' },
-  camTextOn: { color: '#1d4ed8' },
-  camSub: { fontSize: 11, color: '#94a3b8', fontWeight: '600' },
+  body: { paddingHorizontal: 20, marginTop: 6 },
+  section: { fontSize: 21, fontWeight: '900', color: '#F1F5F9', marginBottom: 14, marginTop: 10 },
 
-  card: { flexDirection: 'row', alignItems: 'center', borderRadius: 26, padding: 14, marginBottom: 14, gap: 12 },
-  cardBody: { flex: 1 },
-  cardSi: { fontSize: 21, fontWeight: '900' },
-  cardEn: { fontSize: 13, fontWeight: '700', color: '#475569', marginTop: 2 },
-  cardHint: { fontSize: 13, color: '#64748b', marginTop: 6 },
-  go: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-
+  camRow: { flexDirection: 'row', gap: 12, marginBottom: 14 },
+  camOpt: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: CARD, borderRadius: 22,
+    padding: 12, borderWidth: 2, borderColor: 'transparent' },
+  camOptOn: { borderColor: ACCENT },
+  camTile: { width: 52, height: 52, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  camText: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  camSub: { fontSize: 11.5, color: '#94A3B8', fontWeight: '600' },
   espStatus: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
-  passiveCard: { backgroundColor: '#fff', borderRadius: 20, padding: 14, marginTop: -12, marginBottom: 22, borderWidth: 2, borderColor: '#99f6e4', gap: 6 },
+
+  passiveCard: { backgroundColor: CARD, borderRadius: 22, padding: 14, marginBottom: 10, gap: 6,
+    borderWidth: 1, borderColor: 'rgba(45,212,191,0.35)' },
   passiveHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  passiveTitle: { fontSize: 16, fontWeight: '900', color: '#0f172a' },
-  passiveSub: { fontSize: 12, color: '#64748b', fontWeight: '600' },
-  passiveEvent: { fontSize: 13, color: '#334155' },
+  passiveTitle: { fontSize: 16, fontWeight: '900', color: '#fff' },
+  passiveSub: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
+  passiveEvent: { fontSize: 13, color: '#CBD5E1' },
+
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 16 },
+  card: { width: '48%', backgroundColor: CARD, borderRadius: 28, paddingTop: 18, paddingBottom: 18, paddingHorizontal: 10,
+    alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+  tile: { width: 118, height: 118, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 4, borderColor: '#fff', overflow: 'hidden' },
+  cardSi: { color: '#fff', fontSize: 17, fontWeight: '800', textAlign: 'center', marginTop: 14, lineHeight: 24 },
+  cardEn: { color: '#94A3B8', fontSize: 12, fontWeight: '600', marginTop: 2 },
 });
