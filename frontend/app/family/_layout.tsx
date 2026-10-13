@@ -153,6 +153,7 @@ export default function FamilyLayout() {
 
       {/* Hidden from tab bar */}
       <Tabs.Screen name="updates" options={{ href: null }} />
+      <Tabs.Screen name="alerts" options={{ href: null }} />
     </Tabs>
   );
 }

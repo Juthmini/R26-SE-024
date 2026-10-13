@@ -30,6 +30,7 @@ export const generateStoryFromPhoto = async (data: {
   patientId:    string;
   image_base64: string;
   family_note:  string;
+  category:     string;
 }) => {
   try {
     const response = await axios.post(
@@ -38,6 +39,7 @@ export const generateStoryFromPhoto = async (data: {
         patientId:   data.patientId,
         familyNote:  data.family_note,
         imageBase64: data.image_base64,
+        category:    data.category,
       },
       { timeout: 90000 }
     );
@@ -48,5 +50,64 @@ export const generateStoryFromPhoto = async (data: {
       success: false,
       error:   error.message,
     };
+  }
+};
+
+export interface FamilyMemoryItem {
+  _id: string;
+  photoUrl: string;
+  familyNote: string;
+  category: string;
+  generatedStory: string;
+  playCount: number;
+  createdAt: string;
+}
+
+// fetches every memory a family member has created for this patient —
+// the real backing data for the "Your Stories" list
+export const getMemoriesForPatient = async (patientId: string): Promise<FamilyMemoryItem[]> => {
+  try {
+    const response = await axios.get(`${API_URL}/family/memories/patient/${patientId}`);
+    return response.data?.success ? response.data.memories : [];
+  } catch (error: any) {
+    console.error('Fetch memories error:', error.message);
+    return [];
+  }
+};
+
+export const deleteMemoryById = async (memoryId: string): Promise<boolean> => {
+  try {
+    const response = await axios.delete(`${API_URL}/family/memories/${memoryId}`);
+    return !!response.data?.success;
+  } catch (error: any) {
+    console.error('Delete memory error:', error.message);
+    return false;
+  }
+};
+
+export interface CategoryRecommendation {
+  category: string;
+  avgMoodShiftPercent: number;
+  sessionCount: number;
+}
+
+export interface CategoryRecommendationResponse {
+  success: boolean;
+  totalSessions: number;
+  recommendation: CategoryRecommendation | null;
+  ranked: CategoryRecommendation[];
+}
+
+// fetches which memory category tends to lift this patient's mood the
+// most, based on real past listening sessions
+export const getCategoryRecommendation = async (
+  patientId: string
+): Promise<CategoryRecommendationResponse> => {
+  try {
+    const response = await axios.get(`${API_URL}/family/memories/recommendation/${patientId}`);
+    return response.data;
+  } catch (error: any) {
+    console.error('Fetch category recommendation error:', error.message);
+    return { success: false, totalSessions: 0, recommendation: null, ranked: [] };
   }
 };

@@ -47,6 +47,9 @@ export const getActiveEngagementAlert = (): EngagementAlert => ({
   happyAfter: 71,
   triggeredAt: '2 min ago',
   isActive: true,
+  acknowledged: false,
+  actedAt: null,
+  followUpOutcome: null,
 });
 
 export const getMemoryStories = (): MemoryStory[] => [

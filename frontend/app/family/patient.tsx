@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, Share, StatusBar, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, Share, StatusBar, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '../../src/constants/colors';
 import { getLinkedPatient } from '../../src/services/family/familyService';
 import { buildShareableReport, getMemorySessionReports, MemorySessionReport } from '../../src/services/family/emotionService';
+import { MoodTrendChart } from '../../src/components/family/MoodTrendChart';
 
 const routineItems = [
   { time: '8:00 AM',  task: 'Morning medication',    done: true,  icon: 'medical' },
@@ -85,6 +86,13 @@ export default function PatientScreen() {
           </View>
         </View>
 
+        {/* Mood Trend — real per-session mood shift, oldest to newest */}
+        {!loadingReports && reports.length > 0 && (
+          <View style={{ marginHorizontal: 20 }}>
+            <MoodTrendChart reports={reports} />
+          </View>
+        )}
+
         {/* Memory Session Reports — real data, shareable with a caregiver */}
         <View style={{ marginHorizontal: 20, marginBottom: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -115,10 +123,23 @@ export default function PatientScreen() {
                 <View key={r.id}>
                   {i > 0 && <View style={{ height: 1, backgroundColor: Colors.borderLight, marginHorizontal: 16 }} />}
                   <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 }}>
+                    {r.photoUrl ? (
+                      <Image source={{ uri: r.photoUrl }} style={{ width: 48, height: 48, borderRadius: 10 }} />
+                    ) : (
+                      <View style={{ width: 48, height: 48, borderRadius: 10, backgroundColor: Colors.purpleSoft, justifyContent: 'center', alignItems: 'center' }}>
+                        <Ionicons name="image-outline" size={20} color={Colors.purple} />
+                      </View>
+                    )}
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textPrimary }} numberOfLines={1}>{r.storyTitle}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, backgroundColor: Colors.purpleSoft }}>
+                          <Text style={{ fontSize: 9, fontWeight: '800', color: Colors.purple, textTransform: 'capitalize' }}>{r.category}</Text>
+                        </View>
+                        <Text style={{ fontSize: 11, color: Colors.textMuted }}>{r.date}</Text>
+                      </View>
+                      <Text style={{ fontSize: 12, color: Colors.textPrimary, marginTop: 3 }} numberOfLines={1}>{r.storyTitle}</Text>
                       <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 2 }}>
-                        {r.date} · {r.baselineEmotion} → {r.finalEmotion} · {r.moodShiftPercent > 0 ? '+' : ''}{r.moodShiftPercent}%
+                        Mood: {r.baselineEmotion} → {r.finalEmotion} ({r.moodShiftPercent > 0 ? '+' : ''}{r.moodShiftPercent}%)
                       </Text>
                     </View>
                     <TouchableOpacity onPress={() => shareReport(r)} style={{ padding: 6 }}>

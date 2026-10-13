@@ -67,6 +67,9 @@ export interface EngagementAlert {
   happyAfter: number;       // e.g. 71
   triggeredAt: string;      // time string
   isActive: boolean;
+  acknowledged: boolean;
+  actedAt: string | null;
+  followUpOutcome: 'positive' | 'neutral' | 'difficult' | null;
 }
 
 // ── Feedback & Adaptive Learning ─────────────────────────────────────────────

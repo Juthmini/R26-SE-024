@@ -6,6 +6,8 @@ import { DashboardHeader }    from '../../src/components/family/dashboard/Dashbo
 import { PatientStatusCard }  from '../../src/components/family/dashboard/PatientStatusCard';
 import { StatsGrid }          from '../../src/components/family/dashboard/StatsGrid';
 import { SmartAlertCard }     from '../../src/components/family/dashboard/SmartAlertCard';
+import { FollowUpPrompt }     from '../../src/components/family/dashboard/FollowUpPrompt';
+import { LatestStoryCard }    from '../../src/components/family/dashboard/LatestStoryCard';
 import { QuickActions }       from '../../src/components/family/dashboard/QuickActions';
 import { RecentActivity }     from '../../src/components/family/dashboard/RecentActivity';
 
@@ -14,13 +16,23 @@ import {
   getDashboardStats,
   getRecentUpdates,
 } from '../../src/services/family/familyService';
-import { getLatestEngagementAlert } from '../../src/services/family/emotionService';
+import {
+  acknowledgeAlert,
+  getEngagementAlerts,
+  getLatestEngagementAlert,
+  getMemorySessionReports,
+  MemorySessionReport,
+  recordAction,
+  recordFollowUp,
+} from '../../src/services/family/emotionService';
 import { EngagementAlert } from '../../src/types/family.types';
 import { Colors } from '../../src/constants/colors';
 
 export default function FamilyDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [alert, setAlert] = useState<EngagementAlert | null>(null);
+  const [pendingFollowUp, setPendingFollowUp] = useState<EngagementAlert | null>(null);
+  const [latestReport, setLatestReport] = useState<MemorySessionReport | null>(null);
 
   const patient      = getLinkedPatient();
   const stats        = getDashboardStats();
@@ -33,11 +45,31 @@ export default function FamilyDashboard() {
     setAlert(latest);
   }, [patient.id, patient.name]);
 
-  useEffect(() => { loadAlert(); }, [loadAlert]);
+  // an alert the family already called about, but hasn't said how it went —
+  // most recent first, since getEngagementAlerts preserves the backend's order
+  const loadPendingFollowUp = useCallback(async () => {
+    const alerts = await getEngagementAlerts(patient.id, patient.name);
+    const pending = alerts.find((a) => a.actedAt && !a.followUpOutcome) || null;
+    setPendingFollowUp(pending);
+  }, [patient.id, patient.name]);
+
+  // the latest listening session, shown regardless of whether it crossed
+  // the alert threshold — so something always shows up front, not just
+  // when a big mood swing happened
+  const loadLatestReport = useCallback(async () => {
+    const reports = await getMemorySessionReports(patient.id);
+    setLatestReport(reports[0] || null);
+  }, [patient.id]);
+
+  useEffect(() => {
+    loadAlert();
+    loadPendingFollowUp();
+    loadLatestReport();
+  }, [loadAlert, loadPendingFollowUp, loadLatestReport]);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    loadAlert().finally(() => setRefreshing(false));
+    Promise.all([loadAlert(), loadPendingFollowUp(), loadLatestReport()]).finally(() => setRefreshing(false));
   };
 
   return (
@@ -58,8 +90,8 @@ export default function FamilyDashboard() {
         {/* ── Header ─────────────────────────────────────────────────────────── */}
         <DashboardHeader
           familyName="You"
-          alertCount={stats.activeAlerts}
-          onNotificationPress={() => router.push('/family/updates')}
+          alertCount={alert?.isActive ? 1 : 0}
+          onNotificationPress={() => router.push('/family/alerts')}
           onProfilePress={() => router.push('/family/more')}
         />
 
@@ -69,17 +101,34 @@ export default function FamilyDashboard() {
           onPress={() => router.push('/family/patient')}
         />
 
+        {/* ── Latest Story Watched — always shown, not just on alert-worthy sessions ── */}
+        {latestReport && (
+          <LatestStoryCard report={latestReport} patientName={patient.name} />
+        )}
+
         {/* ── Smart Alert (Predictive Engagement Engine) ─────────────────────── */}
         {alert?.isActive && (
           <SmartAlertCard
             alert={alert}
             onCallNow={() => {
               // Future: open phone dialler or in-app call
-              console.log('Calling patient...');
+              recordAction(alert.id).then(() => {
+                loadAlert();
+                loadPendingFollowUp();
+              });
             }}
             onDismiss={() => {
-              // Future: dismiss alert via API
-              console.log('Alert dismissed');
+              acknowledgeAlert(alert.id).then(() => loadAlert());
+            }}
+          />
+        )}
+
+        {/* ── Follow-up — did the call actually help? ─────────────────────────── */}
+        {pendingFollowUp && (
+          <FollowUpPrompt
+            alert={pendingFollowUp}
+            onAnswer={(outcome) => {
+              recordFollowUp(pendingFollowUp.id, outcome).then(() => setPendingFollowUp(null));
             }}
           />
         )}
@@ -90,7 +139,7 @@ export default function FamilyDashboard() {
           onReminderPress={() => router.push('/family/updates')}
           onMedPress={() => router.push('/family/updates')}
           onMoodPress={() => router.push('/family/patient')}
-          onAlertPress={() => router.push('/family/updates')}
+          onAlertPress={() => router.push('/family/alerts')}
         />
 
         {/* ── Quick Actions ──────────────────────────────────────────────────── */}

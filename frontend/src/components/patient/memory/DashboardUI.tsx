@@ -616,6 +616,15 @@ export default function DashboardUI() {
               <Text style={styles.actionCardSub}>{language === 'si-LK' ? 'සේව් කල ඡායාරූප' : 'View saved photos'}</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#faf5ff', borderColor: '#e9d5ff', padding: 18, borderRadius: 24, elevation: 2 }]} onPress={() => router.push('/patient/memory-vault')}>
+              <View style={[styles.actionIconBox, { backgroundColor: '#7c3aed', width: 56, height: 56, borderRadius: 28 }]}>
+                <Ionicons name="heart" size={30} color="#fff" />
+              </View>
+              {/* Sinhala label is a best-effort translation — worth a native speaker checking it */}
+              <Text style={[styles.actionCardLabel, { color: '#6d28d9', marginTop: 12 }]}>{language === 'si-LK' ? 'මතක කථා' : 'Memory Stories'}</Text>
+              <Text style={styles.actionCardSub}>{language === 'si-LK' ? 'පවුලේ අය කීවු කථා අහන්න' : 'Listen to family stories'}</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#fff1f2', borderColor: '#fecdd3', padding: 18, borderRadius: 24, elevation: 2 }]} onPress={handleSOS}>
               <View style={[styles.actionIconBox, { backgroundColor: '#ef4444', width: 56, height: 56, borderRadius: 28 }]}>
                 <Ionicons name="alert-circle" size={30} color="#fff" />

@@ -238,6 +238,15 @@ const finalizeSession = async (req, res) => {
         const ALERT_THRESHOLD = 1.0;
         const alertTriggered = moodLift >= ALERT_THRESHOLD;
 
+        // whichever dominant emotion showed up most often across the whole
+        // session — "what was she mostly feeling", not just start/end
+        const emotionCounts = {};
+        for (const r of readings) {
+            emotionCounts[r.dominantEmotion] = (emotionCounts[r.dominantEmotion] || 0) + 1;
+        }
+        const mostFrequentEmotion = Object.entries(emotionCounts)
+            .sort((a, b) => b[1] - a[1])[0][0];
+
         const outcome = await SessionOutcome.findOneAndUpdate(
             { sessionId },
             {
@@ -247,6 +256,7 @@ const finalizeSession = async (req, res) => {
                 baselineEmotion: firstReadings[0].dominantEmotion,
                 peakEmotion: peakReading.dominantEmotion,
                 finalEmotion: lastReadings[lastReadings.length - 1].dominantEmotion,
+                mostFrequentEmotion,
                 moodLift: Math.round(moodLift * 100) / 100,
                 totalReadings: readings.length,
                 alertTriggered,
@@ -266,12 +276,123 @@ const finalizeSession = async (req, res) => {
     }
 };
 
+// --- ACKNOWLEDGE an alert — marks a session outcome as handled so it
+//     stops showing as the active "Predictive Engagement" alert ---
+const acknowledgeAlert = async (req, res) => {
+    try {
+        const outcome = await SessionOutcome.findByIdAndUpdate(
+            req.params.id,
+            { acknowledged: true },
+            { new: true }
+        );
+
+        if (!outcome) {
+            return res.status(404).json({
+                success: false,
+                message: 'Outcome not found',
+            });
+        }
+
+        res.status(200).json({ success: true, outcome });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// --- RECORD ACTION — family tapped "Call Now" on an alert. Also
+//     acknowledges it, since acting on an alert is a stronger signal than a
+//     plain dismiss and the family shouldn't see the same card twice ---
+const recordAction = async (req, res) => {
+    try {
+        const outcome = await SessionOutcome.findByIdAndUpdate(
+            req.params.id,
+            { actedAt: new Date(), acknowledged: true },
+            { new: true }
+        );
+
+        if (!outcome) {
+            return res.status(404).json({
+                success: false,
+                message: 'Outcome not found',
+            });
+        }
+
+        res.status(200).json({ success: true, outcome });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// --- RECORD FOLLOW-UP — family reports how the call actually went ---
+const recordFollowUp = async (req, res) => {
+    try {
+        const { followUpOutcome } = req.body;
+
+        if (!['positive', 'neutral', 'difficult'].includes(followUpOutcome)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid followUpOutcome value',
+            });
+        }
+
+        const outcome = await SessionOutcome.findByIdAndUpdate(
+            req.params.id,
+            { followUpOutcome },
+            { new: true }
+        );
+
+        if (!outcome) {
+            return res.status(404).json({
+                success: false,
+                message: 'Outcome not found',
+            });
+        }
+
+        res.status(200).json({ success: true, outcome });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// --- GET engagement stats — did families act on alerts, and did it help ---
+const getEngagementStats = async (req, res) => {
+    try {
+        const { patientId } = req.params;
+        const outcomes = await SessionOutcome.find({ patientId, alertTriggered: true });
+
+        const totalAlerts = outcomes.length;
+        const actedOn = outcomes.filter((o) => o.actedAt).length;
+        const withFollowUp = outcomes.filter((o) => o.followUpOutcome);
+        const positive = withFollowUp.filter((o) => o.followUpOutcome === 'positive').length;
+
+        const avgResponseMs = outcomes
+            .filter((o) => o.actedAt)
+            .reduce((sum, o) => sum + (new Date(o.actedAt) - new Date(o.createdAt)), 0) / (actedOn || 1);
+
+        res.status(200).json({
+            success: true,
+            stats: {
+                totalAlerts,
+                actedOn,
+                responseRate: totalAlerts ? Math.round((actedOn / totalAlerts) * 100) : 0,
+                avgResponseMinutes: actedOn ? Math.round(avgResponseMs / 60000) : null,
+                followUpsLogged: withFollowUp.length,
+                positiveOutcomeRate: withFollowUp.length
+                    ? Math.round((positive / withFollowUp.length) * 100)
+                    : null,
+            },
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 // --- GET all outcomes for a patient (for reporting/dashboard later) ---
 const getPatientOutcomes = async (req, res) => {
     try {
         const { patientId } = req.params;
         const outcomes = await SessionOutcome.find({ patientId })
-            .populate('memoryId', 'photoUrl generatedStory familyNote')
+            .populate('memoryId', 'photoUrl generatedStory familyNote category')
             .sort({ createdAt: -1 });
 
         res.status(200).json({ success: true, outcomes });
@@ -286,4 +407,8 @@ module.exports = {
     logEmotionReading,
     finalizeSession,
     getPatientOutcomes,
+    acknowledgeAlert,
+    recordAction,
+    recordFollowUp,
+    getEngagementStats,
 };

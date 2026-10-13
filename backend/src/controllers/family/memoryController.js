@@ -1,16 +1,22 @@
 const Memory = require('../../models/family/FamilyMemory');
 const Patient = require('../../models/caregiver/Patient');
 const FamilyPatientProfile = require('../../models/family/FamilyPatientProfile');
+const SessionOutcome = require('../../models/family/SessionOutcome');
 const axios = require('axios');
 const cloudinary = require('../../config/cloudinary');
 const mongoose = require('mongoose');
+
+// a category needs at least this many completed sessions before it's
+// confident enough to recommend — avoids a single lucky/unlucky session
+// driving a misleading suggestion
+const MIN_SESSIONS_PER_CATEGORY = 2;
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL;
 
 // --- CREATE memory + generate story ---
 const createMemory = async (req, res) => {
   try {
-    const { patientId, familyNote, imageBase64 } = req.body;
+    const { patientId, familyNote, imageBase64, category } = req.body;
 
     if (!patientId || !familyNote || !imageBase64) {
       return res.status(400).json({
@@ -70,6 +76,7 @@ const createMemory = async (req, res) => {
       uploadedBy: req.user ? req.user._id : new mongoose.Types.ObjectId(),
       photoUrl: uploadResult.secure_url,
       familyNote,
+      category: category || 'other',
       aiPhotoDescription: 'a special family memory',
       generatedStory: aiResponse.data.story,
     });
@@ -91,6 +98,44 @@ const getMemoriesByPatient = async (req, res) => {
       .sort({ createdAt: -1 });
 
     res.status(200).json({ success: true, memories });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// --- GET adaptive story recommendation — ranks memory categories by their
+//     average real mood-shift across past listening sessions, so the family
+//     knows what kind of story tends to work best ---
+const getCategoryRecommendation = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    const outcomes = await SessionOutcome.find({ patientId })
+      .populate('memoryId', 'category');
+
+    const byCategory = {};
+    for (const outcome of outcomes) {
+      const category = outcome.memoryId?.category || 'other';
+      if (!byCategory[category]) byCategory[category] = { sum: 0, count: 0 };
+      byCategory[category].sum += outcome.moodShiftPercent || 0;
+      byCategory[category].count += 1;
+    }
+
+    const ranked = Object.entries(byCategory)
+      .map(([category, { sum, count }]) => ({
+        category,
+        avgMoodShiftPercent: Math.round((sum / count) * 10) / 10,
+        sessionCount: count,
+      }))
+      .filter((entry) => entry.sessionCount >= MIN_SESSIONS_PER_CATEGORY)
+      .sort((a, b) => b.avgMoodShiftPercent - a.avgMoodShiftPercent);
+
+    res.status(200).json({
+      success: true,
+      totalSessions: outcomes.length,
+      recommendation: ranked[0] || null,
+      ranked,
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -158,6 +203,7 @@ module.exports = {
   createMemory,
   getMemoriesByPatient,
   getMemoryById,
+  getCategoryRecommendation,
   incrementPlayCount,
   deleteMemory,
 };
