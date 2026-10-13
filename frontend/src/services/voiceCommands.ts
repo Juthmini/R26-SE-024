@@ -4,7 +4,8 @@
 import * as Speech from 'expo-speech';
 import axios from 'axios';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.20.10.3:5000';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.80:5000';
+const AI_URL = process.env.EXPO_PUBLIC_AI_URL || 'http://192.168.1.80:8000';
 
 const OBJECT_KEYWORDS = [
   'toothbrush', 'brush', 'spectacles', 'glasses', 'specs', 'keys', 'key',
@@ -133,7 +134,7 @@ export async function findAndSpeakLocation(
     // 3. Python Backend Vault
     try {
       const pId = patientId || 'PAT-2026-003';
-      const pyRes = await axios.get(`http://172.20.10.3:8000/vault/${pId}`);
+      const pyRes = await axios.get(`${AI_URL}/vault/${pId}`);
       if (pyRes.data.status === 'success' && pyRes.data.vault) {
         pyRes.data.vault.forEach((obj: any) => {
           allMemories.push({

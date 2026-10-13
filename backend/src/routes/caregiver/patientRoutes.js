@@ -10,6 +10,7 @@ const {
   addRoutine,
   toggleRoutine,
   deleteRoutine,
+  deriveRoutine,
 } = require('../../controllers/caregiver/patientController');
 
 //  All routes protected - only caregivers
@@ -22,5 +23,6 @@ router.delete('/:id', protect, authorize('caregiver'), deletePatient);
 router.post('/:id/routines',                    protect, authorize('caregiver'), addRoutine);
 router.patch('/:id/routines/:routineId/toggle', protect, authorize('caregiver'), toggleRoutine);
 router.delete('/:id/routines/:routineId',       protect, authorize('caregiver'), deleteRoutine);
+router.post('/:id/derive-routine',              protect, authorize('caregiver'), deriveRoutine);
 
 module.exports = router;

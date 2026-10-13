@@ -5,6 +5,12 @@ import { io } from 'socket.io-client';
 import Webcam from 'react-webcam';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+// Fixed common-item list: these are what the Find My Things YOLO-World model is
+// configured to recognize out of the box. Picking from here means no typing and
+// a name that matches exactly what the scan step searches for. "Other" still
+// allows a one-off custom item outside this list.
+const COMMON_ITEMS = ['Glasses', 'Wallet', 'Pill Box', 'Hearing Aid Case', 'Keys', 'TV Remote'];
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -60,6 +66,7 @@ const PersonalizedObjectUpload = () => {
   const [relationship, setRelationship] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [showWebcam, setShowWebcam] = useState(false);
+  const [useOtherItem, setUseOtherItem] = useState(false);
 
   useEffect(() => {
     fetchPatients();
@@ -100,6 +107,8 @@ const PersonalizedObjectUpload = () => {
       setProgress(0);
       setTrainingStatus('idle');
       setIsVerifying(false);
+      setUseOtherItem(false);
+      setCustomName('');
 
       // Load existing saved objects for this patient
       try {
@@ -287,24 +296,65 @@ const PersonalizedObjectUpload = () => {
                   </div>
                 </div>
                 <div className="flex flex-col gap-2 items-end">
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      placeholder={activeTab === 'person' ? "Person's Name (e.g. Sarah)" : "Item Name (e.g. Red Mug)"} 
-                      className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold w-48"
-                      value={customName}
-                      onChange={(e) => setCustomName(e.target.value)}
-                    />
-                    {activeTab === 'person' && (
-                      <input 
-                        type="text" 
-                        placeholder="Relationship (e.g. Daughter)" 
+                  {activeTab === 'person' ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Person's Name (e.g. Sarah)"
+                        className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold w-48"
+                        value={customName}
+                        onChange={(e) => setCustomName(e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Relationship (e.g. Daughter)"
                         className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold w-48"
                         value={relationship}
                         onChange={(e) => setRelationship(e.target.value)}
                       />
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="w-full max-w-md">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 text-right">Which item is this?</p>
+                      <div className="flex flex-wrap gap-2 justify-end">
+                        {COMMON_ITEMS.map(item => (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() => { setUseOtherItem(false); setCustomName(item); }}
+                            className={`px-4 py-2 rounded-xl text-xs font-black border transition-all ${
+                              !useOtherItem && customName === item
+                                ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200'
+                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-300'
+                            }`}
+                          >
+                            {item}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => { setUseOtherItem(true); setCustomName(''); }}
+                          className={`px-4 py-2 rounded-xl text-xs font-black border transition-all ${
+                            useOtherItem
+                              ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200'
+                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-300'
+                          }`}
+                        >
+                          Other
+                        </button>
+                      </div>
+                      {useOtherItem && (
+                        <input
+                          type="text"
+                          placeholder="Item name (e.g. Red Mug)"
+                          className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-right"
+                          value={customName}
+                          onChange={(e) => setCustomName(e.target.value)}
+                          autoFocus
+                        />
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-center gap-4">
                     <input type="file" id="object-upload" multiple className="hidden" onChange={handleFileUpload} />
                     <label htmlFor="object-upload" className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl text-sm font-black hover:bg-blue-700 transition-all cursor-pointer shadow-lg shadow-blue-200">

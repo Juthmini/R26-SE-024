@@ -215,6 +215,27 @@ const login = async (req, res) => {
     user.refreshToken = refreshToken;
     await user.save({ validateBeforeSave: false });
 
+    // Patients log in with email+password against THIS User record, but the
+    // features that actually store per-patient data (Personal Vault, Find My
+    // Things, routines, medications) all key off the separate caregiver
+    // "Patient" model instead (see src/models/caregiver/Patient.js -
+    // registeredPatientId links a caregiver Patient record back to this
+    // User). Without resolving that link at login time, a patient could log
+    // in successfully but the app would have no valid ID for any of those
+    // features to use.
+    let linkedPatient = null;
+    if (user.role === 'patient') {
+      const CaregiverPatient = require('../../models/caregiver/Patient');
+      const match = await CaregiverPatient.findOne({ registeredPatientId: user._id });
+      if (match) {
+        linkedPatient = {
+          id: match._id,
+          firstName: match.name,
+          customerCode: `EXT-${String(match._id).slice(-6).toUpperCase()}`,
+        };
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: 'Login successful.',
@@ -225,6 +246,7 @@ const login = async (req, res) => {
           email:    user.email,
           role:     user.role,
         },
+        linkedPatient,
         accessToken,
         refreshToken,
       },

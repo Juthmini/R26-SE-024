@@ -12,7 +12,7 @@ import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import axios from 'axios';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.20.10.3:5000';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.80:5000';
 const { width, height } = Dimensions.get('window');
 
 const OBJECT_COLORS: Record<string, string> = {

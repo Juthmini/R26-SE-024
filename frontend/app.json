@@ -73,6 +73,7 @@
         }
       ],
       "expo-background-task",
+      "expo-video",
       "expo-asset",
       "expo-font",
       "expo-image",

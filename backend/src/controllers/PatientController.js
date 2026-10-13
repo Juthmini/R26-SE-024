@@ -82,10 +82,31 @@ const bulkUploadPatients = async (req, res) => {
 
 // @desc    Get all patients
 // @route   GET /api/patients
+//
+// Returns the admin-registered patients (PatientRegistry) exactly as before,
+// plus patients registered through the caregiver app (caregiver "Patient"
+// model, collection "patients"), which Personal Vault / Find My Things and the
+// mobile login key off. A caregiver patient that shares its _id with a registry
+// record (see seeder/seedDemoPatientIdentity.js) is listed once.
 const getAllPatients = async (req, res) => {
   try {
-    const patients = await Patient.find().sort({ createdAt: -1 });
-    res.status(200).json({ success: true, data: patients });
+    const registry = await Patient.find().sort({ createdAt: -1 });
+    const seen = new Set(registry.map((p) => String(p._id)));
+    const rawDocs = await Patient.db.collection('patients').find({}).sort({ createdAt: -1 }).toArray();
+    const caregiverPatients = rawDocs.filter((doc) => !seen.has(String(doc._id))).map((doc) => {
+      const nameParts = (doc.name || doc.initials || 'Unknown').trim().split(' ');
+      return {
+        _id: doc._id,
+        firstName: nameParts[0] || 'Unknown',
+        lastName: nameParts.slice(1).join(' ') || '',
+        customerCode: `EXT-${String(doc._id).slice(-6).toUpperCase()}`,
+        condition: doc.condition || '',
+        age: doc.age,
+        createdAt: doc.createdAt,
+      };
+    });
+
+    res.status(200).json({ success: true, data: [...registry, ...caregiverPatients] });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

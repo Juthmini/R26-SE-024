@@ -4,6 +4,11 @@ const routineSchema = new mongoose.Schema({
   title:     { type: String, required: true },
   time:      { type: String, required: true },
   completed: { type: Boolean, default: false },
+  // `completed` above is just "is this checked right now" - it never resets,
+  // so it can't tell today's completion from last week's. completionLog is
+  // the actual history: one timestamp per time it was marked done, which is
+  // what the diary generator needs to know "did this happen today".
+  completionLog: { type: [Date], default: [] },
 });
 
 const patientSchema = new mongoose.Schema(

@@ -6,3 +6,16 @@ node_modules
 .venv
 .venv-ml
 __pycache__
+*.pt
+
+# ESP32 firmware stays local (contains Wi-Fi credentials)
+hardware/
+
+# Runtime data written by the AI memory service
+backend/ml/memory-service/moments_db.json
+backend/ml/memory-service/memory_quiz_db.json
+backend/ml/memory-service/visit_talk_db.json
+backend/ml/memory-service/reminders_db.json
+backend/ml/memory-service/esp32_passive.json
+backend/ml/memory-service/tts_cache/
+backend/ml/memory-service/videos/

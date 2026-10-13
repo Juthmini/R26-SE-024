@@ -205,6 +205,23 @@ export const loginUser = async (email: string, password: string) => {
       if (user.role) await storage.setItem("userRole", user.role);
       await storage.setItem("userData", JSON.stringify(user));
       if (userId) await storage.setItem("caregiverId", String(userId));
+
+      // Personal Vault / Find My Things / routines key off the separate
+      // caregiver Patient record (see backend authController.js login) when
+      // one exists. It MUST always be overwritten here: a patient without a
+      // caregiver record used to keep the previous user's 'patient' entry and
+      // saw that person's things, people and stories.
+      if (data.data.linkedPatient) {
+        await storage.setItem("patient", JSON.stringify(data.data.linkedPatient));
+      } else if (user.role === "patient" && userId) {
+        await storage.setItem("patient", JSON.stringify({
+          id: String(userId),
+          firstName: (user.fullName || "").split(" ")[0],
+          selfRegistered: true,
+        }));
+      } else {
+        await storage.multiRemove(["patient"]);
+      }
     }
     return data;
   } catch (error) {
@@ -315,6 +332,7 @@ export const logoutUser = async () => {
     "refreshToken",
     "userRole",
     "userData",
+    "patient", // or the next person to log in on this phone inherits it
   ]);
 };
 
