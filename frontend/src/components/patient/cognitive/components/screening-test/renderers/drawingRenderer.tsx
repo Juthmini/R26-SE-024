@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import {
   Canvas,
   Path,
@@ -8,6 +8,9 @@ import {
 } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Question } from '@/src/types/assessment.types';
+import { Ionicons } from '@expo/vector-icons';
+import { CARD_SHADOW, InfoCard, VerdictButtons } from '../assessmentUi';
+import { PENTAGON_CRITERIA, ReferenceFigure } from './referenceFigures';
 
 interface DrawnPath {
   path: SkPath;
@@ -76,34 +79,38 @@ export function DrawingRenderer({ question, onAnswer }: Props) {
   return (
     <View className="px-6 gap-5">
 
-      {/* Reference image - the two overlapping pentagons */}
-      <View className="items-center">
-        <Text className="text-xs text-gray-400 mb-2 uppercase tracking-wide">
-          Hint - Copy this drawing
-        </Text>
-        <View className="border border-gray-200 rounded-2xl bg-white p-4">
-          {/* 
-            Use the pentagon SVG from your assets.
-            This must match the exact MMSE pentagon diagram -
-            two overlapping convex pentagons where the
-            intersection creates a four-sided figure.
-          */}
-          <Image
-            source={require('@/assets/images/cognitive/mmse_pentagons.png')}
-            style={{ width: 180, height: 120 }}
-            resizeMode="contain"
-          />
+      {/* Reference figure - rotates per session (pentagons, cube, ...) */}
+      <View className="bg-white rounded-3xl p-4 items-center gap-2" style={CARD_SHADOW}>
+        <View className="flex-row items-center gap-2 self-start">
+          <Ionicons name="image-outline" size={18} color="#2563eb" />
+          <Text className="text-base font-semibold text-gray-700">Copy this drawing</Text>
         </View>
+        <ReferenceFigure referenceAsset={question.referenceAsset} />
       </View>
 
       {/* Drawing canvas */}
-      <View>
-        <Text className="text-xs text-gray-400 mb-2 uppercase tracking-wide">
-          Patient draws here
-        </Text>
+      <View className="gap-2">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center gap-2">
+            <Ionicons name="brush-outline" size={18} color="#2563eb" />
+            <Text className="text-base font-semibold text-gray-700">Draw it here</Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleClear}
+            disabled={!hasDrawn}
+            accessibilityRole="button"
+            accessibilityLabel="Clear drawing"
+            className={`flex-row items-center gap-1 rounded-full px-3 py-1.5 ${
+              hasDrawn ? 'bg-gray-100' : 'opacity-40'
+            }`}
+          >
+            <Ionicons name="trash-outline" size={16} color="#4b5563" />
+            <Text className="text-sm font-medium text-gray-600">Clear</Text>
+          </TouchableOpacity>
+        </View>
         <View
-          className="border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden bg-white"
-          style={{ height: 260 }}
+          className="border-2 border-dashed border-blue-200 rounded-3xl overflow-hidden bg-white"
+          style={{ height: 280 }}
         >
           <GestureDetector gesture={pan}>
             <Canvas style={StyleSheet.absoluteFill}>
@@ -138,82 +145,49 @@ export function DrawingRenderer({ question, onAnswer }: Props) {
 
           {/* Empty state hint */}
           {!hasDrawn && (
-            <View className="absolute inset-0 items-center justify-center pointer-events-none">
-              <Text className="text-gray-300 text-sm">Draw here</Text>
+            <View className="absolute inset-0 items-center justify-center gap-2 pointer-events-none">
+              <Ionicons name="hand-left-outline" size={32} color="#cbd5e1" />
+              <Text className="text-gray-400 text-base">Use your finger to draw</Text>
             </View>
           )}
         </View>
       </View>
 
-      {/* Controls */}
-      <View className="flex-row gap-3">
-        <TouchableOpacity
-          onPress={handleClear}
-          className="flex-1 border border-gray-200 py-3 rounded-2xl items-center"
-        >
-          <Text className="text-gray-500 font-medium">Clear</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 
+      {/*
         Caregiver scoring section.
-        
+
         MMSE scoring for this question requires human judgement.
         The Caregiver looks at what the patient drew and decides:
-        
-        PASS (1 point) - both shapes are convex pentagons (5 sides each)
-                          AND they overlap
-                          AND the overlap region is a 4-sided figure
-        
-        FAIL (0 points) - any of the above conditions are not met,
-                           or the patient refused / was unable to draw
+
+        The figure rotates per session (pentagons, cube, overlapping
+        squares, diamond in square); each comes with its own checklist in
+        `question.criteria` (pentagons when absent, for older sessions).
+
+        PASS (1 point)  - the drawing meets every item on the checklist
+        FAIL (0 points) - any item is not met, or the patient refused /
+                          was unable to draw
       */}
       {hasDrawn && (
-        <View className="gap-3">
-          <View className="h-px bg-gray-100" />
-          <Text className="text-sm font-medium text-gray-700">
-            Caregiver: does the drawing meet all three criteria?
-          </Text>
-
+        <View className="gap-4">
           {/* Scoring criteria checklist - for Caregiver reference */}
-          <View className="bg-gray-50 rounded-xl p-3 gap-1.5">
-            <Text className="text-xs text-gray-500">✓ Both figures have five sides</Text>
-            <Text className="text-xs text-gray-500">✓ Both figures are convex</Text>
-            <Text className="text-xs text-gray-500">✓ Figures overlap each other</Text>
-            <Text className="text-xs text-gray-500">✓ Overlap creates a four-sided shape</Text>
-          </View>
+          <InfoCard icon="list-outline" tone="caregiver" title="Check the drawing">
+            <View className="gap-1.5 mt-1">
+              {(question.criteria?.length ? question.criteria : PENTAGON_CRITERIA).map((c) => (
+                <View key={c} className="flex-row items-center gap-2">
+                  <Ionicons name="ellipse" size={6} color="#b45309" />
+                  <Text className="text-base text-amber-800">{c}</Text>
+                </View>
+              ))}
+            </View>
+          </InfoCard>
 
-          <View className="flex-row gap-3">
-            <TouchableOpacity
-              onPress={() => handleMark(false)}
-              className={`flex-1 py-3 rounded-2xl items-center border ${
-                CaregiverMarked === false
-                  ? 'bg-red-500 border-red-500'
-                  : 'bg-white border-gray-200'
-              }`}
-            >
-              <Text className={`font-semibold ${
-                CaregiverMarked === false ? 'text-white' : 'text-gray-500'
-              }`}>
-                Incorrect - 0 pts
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => handleMark(true)}
-              className={`flex-1 py-3 rounded-2xl items-center border ${
-                CaregiverMarked === true
-                  ? 'bg-green-500 border-green-500'
-                  : 'bg-white border-gray-200'
-              }`}
-            >
-              <Text className={`font-semibold ${
-                CaregiverMarked === true ? 'text-white' : 'text-gray-500'
-              }`}>
-                Correct - 1 pt
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <VerdictButtons
+            question="Does the drawing meet all the criteria?"
+            value={CaregiverMarked === null ? null : CaregiverMarked ? 'correct' : 'incorrect'}
+            onSelect={(v) => handleMark(v === 'correct')}
+            correctLabel="Correct · 1 pt"
+            incorrectLabel="Incorrect · 0 pts"
+          />
         </View>
       )}
 

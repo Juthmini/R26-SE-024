@@ -1,11 +1,13 @@
 import { MMSESession } from "@/src/types/assessment.types";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   AIPredictionCard,
   AIPredictionCardHandle,
 } from "../../../cognitive/components/screening-test/AIPredictionCard";
+import { AiButton } from "../../../cognitive/components/screening-test/triageUi";
 import { SectionHeader } from "../components/SectionHeader";
 import { FaqFormModal } from "./FaqFormModal";
 
@@ -46,25 +48,19 @@ export function SeverityCheckSection({
       <SectionHeader title="AI Triage Check" icon="pulse-outline" />
 
       {!latestSession ? (
-        <View>
-          <Text style={{ color: "#64748B", fontSize: 14, fontWeight: "700", marginBottom: showTakeAssessmentCta ? 12 : 0 }}>
-            No completed assessment yet - the triage check needs one first.
-          </Text>
+        <View style={{ gap: 12 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Ionicons name="document-text-outline" size={22} color="#64748B" />
+            <Text style={{ color: "#64748B", flex: 1, fontSize: 15, fontWeight: "600" }}>
+              No completed assessment yet - the triage check needs one first.
+            </Text>
+          </View>
           {showTakeAssessmentCta && (
-            <TouchableOpacity
+            <AiButton
+              label="Take the assessment"
+              trailingIcon="arrow-forward"
               onPress={() => router.push("/patient/cognitive/assessment")}
-              style={{
-                alignSelf: "flex-start",
-                backgroundColor: "#3B82F6",
-                borderRadius: 12,
-                paddingHorizontal: 14,
-                paddingVertical: 8,
-              }}
-            >
-              <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>
-                Take the assessment
-              </Text>
-            </TouchableOpacity>
+            />
           )}
         </View>
       ) : (
@@ -79,22 +75,12 @@ export function SeverityCheckSection({
           {/* Re-open the questionnaire any time, not just on the first run.
               Submitting again re-runs the triage, which picks up the latest
               MMSE score and the new answers. */}
-          <TouchableOpacity
+          <AiButton
+            label="Retake questionnaire"
+            icon="refresh"
+            variant="secondary"
             onPress={() => setFaqModalOpen(true)}
-            style={{
-              alignSelf: "flex-start",
-              borderColor: "#CBD5E1",
-              borderRadius: 12,
-              borderWidth: 1,
-              marginTop: 4,
-              paddingHorizontal: 14,
-              paddingVertical: 8,
-            }}
-          >
-            <Text style={{ color: "#475569", fontSize: 13, fontWeight: "700" }}>
-              Retake questionnaire
-            </Text>
-          </TouchableOpacity>
+          />
 
           <FaqFormModal
             visible={faqModalOpen}

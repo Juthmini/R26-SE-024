@@ -1,48 +1,31 @@
 import { predictTriage } from "@/src/services/patient/cognitive/dementiaService";
-import { TriageLevel, TriagePrediction } from "@/src/types/dementia.types";
+import { TriagePrediction } from "@/src/types/dementia.types";
+import { Ionicons } from "@expo/vector-icons";
 import React, {
   forwardRef,
   useEffect,
   useImperativeHandle,
   useState,
 } from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { Text, View } from "react-native";
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
+import {
+  AiButton,
+  AiCardShell,
+  TRIAGE_ORDER,
+  TRIAGE_OUTCOME,
+} from "./triageUi";
+import { GlowIcon, GRADIENTS, GradientView, IoniconName } from "./visuals";
 
 // The dementia model returns a 2-class triage: keep monitoring at home
 // ("monitor") vs. recommend a clinical review ("escalate"). This card is the
 // single place that result is shown on the results screen.
-const TRIAGE_STYLES: Record<
-  TriageLevel,
-  { bg: string; border: string; badge: string; badgeText: string; bar: string }
-> = {
-  monitor: {
-    bg: "bg-green-50",
-    border: "border-green-200",
-    badge: "bg-green-100",
-    badgeText: "text-green-800",
-    bar: "bg-green-500",
-  },
-  escalate: {
-    bg: "bg-red-50",
-    border: "border-red-200",
-    badge: "bg-red-100",
-    badgeText: "text-red-800",
-    bar: "bg-red-500",
-  },
-};
-
-const LABELS: Record<TriageLevel, string> = {
-  monitor: "Keep an eye at home",
-  escalate: "See a doctor",
-};
-
-// Short version for the probability breakdown rows.
-const SHORT_LABELS: Record<TriageLevel, string> = {
-  monitor: "At home",
-  escalate: "See a doctor",
-};
-
-const ORDER: TriageLevel[] = ["monitor", "escalate"];
 
 interface AIPredictionCardProps {
   patientId: string;
@@ -101,49 +84,44 @@ export const AIPredictionCard = forwardRef<AIPredictionCardHandle, AIPredictionC
 
   if (loading) {
     return (
-      <View className="mb-4 w-full max-w-[640px] self-center rounded-3xl border border-gray-100 bg-white p-6 items-center">
-        <ActivityIndicator color="#3b82f6" />
-        <Text className="text-xs text-gray-400 mt-3">Running AI triage prediction…</Text>
-      </View>
+      <AiCardShell>
+        <View className="items-center py-3 gap-2">
+          <PulsingSparkle />
+          <Text className="text-lg font-bold text-gray-900">Analysing results…</Text>
+          <Text className="text-sm text-gray-500 text-center">
+            Combining the MMSE score with daily-living answers
+          </Text>
+        </View>
+      </AiCardShell>
     );
   }
 
   // Not auto-run and nothing has happened yet - show the idle "Run" state.
   if (!autoRun && !hasRun) {
     return (
-      <View className="mb-4 w-full max-w-[640px] self-center rounded-3xl border border-gray-100 bg-white p-5 items-start">
-        <Text className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
-          AI Triage Check
-        </Text>
-        <Text className="text-sm text-gray-500 mb-3">
-          Run the AI triage check using the latest completed assessment.
-        </Text>
-        <TouchableOpacity
-          onPress={load}
-          className="self-start px-4 py-2 rounded-xl bg-blue-500"
-        >
-          <Text className="text-xs font-semibold text-white">Run Check</Text>
-        </TouchableOpacity>
-      </View>
+      <AiCardShell>
+        <View className="flex-row items-center gap-3 mb-4">
+          <GlowIcon colors={GRADIENTS.violet} icon="analytics" size={44} />
+          <Text className="flex-1 text-base text-gray-600 leading-relaxed">
+            Run the AI triage check using the latest completed assessment and
+            daily-living answers.
+          </Text>
+        </View>
+        <AiButton label="Run AI check" icon="sparkles" onPress={load} />
+      </AiCardShell>
     );
   }
 
   if (faqRequired && !onFaqRequired) {
     return (
-      <View className="mb-4 w-full max-w-[640px] self-center rounded-3xl border border-gray-100 bg-white p-5">
-        <Text className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">
-          AI Prediction
-        </Text>
-        <Text className="text-sm text-gray-500 mb-3">
-          Complete the daily-living questionnaire to get a triage result.
-        </Text>
-        <TouchableOpacity
-          onPress={load}
-          className="self-start px-4 py-2 rounded-xl bg-gray-100"
-        >
-          <Text className="text-xs font-semibold text-gray-600">Retry</Text>
-        </TouchableOpacity>
-      </View>
+      <AiCardShell>
+        <StatusRow
+          icon="clipboard"
+          colors={GRADIENTS.amber}
+          text="Complete the daily-living questionnaire to get a triage result."
+        />
+        <AiButton label="Retry" icon="refresh" variant="secondary" onPress={load} />
+      </AiCardShell>
     );
   }
 
@@ -154,76 +132,139 @@ export const AIPredictionCard = forwardRef<AIPredictionCardHandle, AIPredictionC
       return null;
     }
     return (
-      <View className="mb-4 w-full max-w-[640px] self-center rounded-3xl border border-gray-100 bg-white p-5">
-        <Text className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">
-          AI Prediction
-        </Text>
-        <Text className="text-sm text-gray-500 mb-3">
-          {error ?? "Prediction unavailable."} Make sure the ML service is running.
-        </Text>
-        <TouchableOpacity
-          onPress={load}
-          className="self-start px-4 py-2 rounded-xl bg-gray-100"
-        >
-          <Text className="text-xs font-semibold text-gray-600">Retry</Text>
-        </TouchableOpacity>
-      </View>
+      <AiCardShell>
+        <StatusRow
+          icon="cloud-offline"
+          colors={GRADIENTS.slate}
+          text={`${error ?? "Prediction unavailable."} Make sure the ML service is running.`}
+        />
+        <AiButton label="Retry" icon="refresh" variant="secondary" onPress={load} />
+      </AiCardShell>
     );
   }
 
-  const styles = TRIAGE_STYLES[result.triage];
+  const outcome = TRIAGE_OUTCOME[result.triage];
+  const pcts = TRIAGE_ORDER.map((level) => ({
+    level,
+    pct: Math.round((result.probabilities[level] ?? 0) * 100),
+  }));
 
   return (
-    <View className={`mb-4 w-full max-w-[640px] self-center rounded-3xl border p-6 ${styles.bg} ${styles.border}`}>
-      <View className="flex-row items-center justify-between mb-3">
-        <Text className="text-xs font-bold uppercase tracking-widest text-gray-500">
-          AI Triage Prediction
+    <Animated.View entering={FadeInDown.duration(450)}>
+      <AiCardShell subtitle="Your triage result">
+        {/* Outcome */}
+        <GradientView
+          colors={outcome.softGradient}
+          className="items-center rounded-3xl px-4 pt-3 pb-5 mb-4"
+        >
+          <GlowIcon colors={outcome.gradient} icon={outcome.icon} size={76} />
+          <Text className="text-xs font-bold uppercase tracking-widest text-gray-500 mt-1">
+            AI recommendation
+          </Text>
+          <Text
+            className="text-[26px] font-extrabold text-gray-900 text-center mt-1"
+            accessibilityRole="header"
+          >
+            {outcome.label}
+          </Text>
+          <View
+            className="flex-row items-center gap-1.5 mt-3 rounded-full bg-white px-3.5 py-1.5"
+            style={{
+              shadowColor: outcome.accent,
+              shadowOpacity: 0.15,
+              shadowRadius: 6,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: 2,
+            }}
+          >
+            <Ionicons name="shield-checkmark" size={15} color={outcome.accent} />
+            <Text className={`text-sm font-bold ${outcome.text}`}>
+              {Math.round(result.confidence * 100)}% confident
+            </Text>
+          </View>
+        </GradientView>
+
+        <Text className="text-base text-gray-700 leading-relaxed mb-5">
+          {result.message}
         </Text>
-        <View className={`px-2.5 py-1 rounded-lg ${styles.badge}`}>
-          <Text className={`text-xs font-semibold ${styles.badgeText}`}>
-            {Math.round(result.confidence * 100)}% confidence
+
+        {/* Probability breakdown - one stacked gradient bar */}
+        <Text className="text-sm font-semibold text-gray-500 mb-2">
+          How the model weighed it
+        </Text>
+        <View
+          className="h-4 flex-row rounded-full overflow-hidden bg-gray-100"
+          accessibilityLabel={pcts
+            .map((p) => `${TRIAGE_OUTCOME[p.level].shortLabel} ${p.pct}%`)
+            .join(", ")}
+        >
+          {pcts.map((p) => (
+            <GradientView
+              key={p.level}
+              colors={TRIAGE_OUTCOME[p.level].gradient}
+              diagonal={false}
+              style={{ width: `${p.pct}%`, height: "100%" }}
+            />
+          ))}
+        </View>
+        <View className="flex-row justify-between mt-2.5">
+          {pcts.map((p) => (
+            <View key={p.level} className="flex-row items-center gap-1.5">
+              <View className={`w-2.5 h-2.5 rounded-full ${TRIAGE_OUTCOME[p.level].dot}`} />
+              <Text className="text-sm text-gray-600">
+                {TRIAGE_OUTCOME[p.level].shortLabel}{" "}
+                <Text className="font-bold text-gray-900">{p.pct}%</Text>
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <View className="flex-row items-center gap-2 mt-4 rounded-2xl bg-slate-50 px-3 py-2.5">
+          <Ionicons name="information-circle" size={18} color="#94a3b8" />
+          <Text className="flex-1 text-xs text-gray-500">
+            Screening triage only - not a diagnosis.
           </Text>
         </View>
-      </View>
 
-      <Text className="text-xl font-extrabold text-gray-900 mb-1">
-        {LABELS[result.triage]}
-      </Text>
-      <Text className="text-sm text-gray-600 mb-4">{result.message}</Text>
-
-      {/* Probability breakdown */}
-      <View className="mb-1">
-        {ORDER.map((level) => {
-          const pct = Math.round((result.probabilities[level] ?? 0) * 100);
-          return (
-            <View key={level} className="flex-row items-center mb-1.5">
-              <Text className="w-24 text-xs text-gray-500">{SHORT_LABELS[level]}</Text>
-              <View className="flex-1 h-2 bg-white rounded-full overflow-hidden mr-2">
-                <View
-                  className={`h-full rounded-full ${TRIAGE_STYLES[level].bar}`}
-                  style={{ width: `${pct}%` }}
-                />
-              </View>
-              <Text className="w-9 text-xs text-gray-400 text-right">{pct}%</Text>
-            </View>
-          );
-        })}
-      </View>
-
-      <Text className="text-[10px] text-gray-400 mt-2">
-        Screening triage only - not a diagnosis.
-      </Text>
-
-      {!autoRun && (
-        <TouchableOpacity
-          onPress={load}
-          className="self-start mt-3 px-4 py-2 rounded-xl bg-white/70"
-        >
-          <Text className="text-xs font-semibold text-gray-700">Re-run Check</Text>
-        </TouchableOpacity>
-      )}
-    </View>
+        {!autoRun && (
+          <View className="mt-4">
+            <AiButton label="Re-run check" icon="refresh" variant="secondary" onPress={load} />
+          </View>
+        )}
+      </AiCardShell>
+    </Animated.View>
   );
 });
 
 AIPredictionCard.displayName = "AIPredictionCard";
+
+function StatusRow({
+  icon,
+  colors,
+  text,
+}: {
+  icon: IoniconName;
+  colors: readonly [string, string, ...string[]];
+  text: string;
+}) {
+  return (
+    <View className="flex-row items-center gap-3 mb-4">
+      <GlowIcon colors={colors} icon={icon} size={44} />
+      <Text className="flex-1 text-base text-gray-600 leading-relaxed">{text}</Text>
+    </View>
+  );
+}
+
+// Gently "breathing" AI badge for the loading state.
+function PulsingSparkle() {
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    scale.value = withRepeat(withTiming(1.12, { duration: 700 }), -1, true);
+  }, [scale]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <Animated.View style={style}>
+      <GlowIcon colors={GRADIENTS.ai} icon="sparkles" size={64} />
+    </Animated.View>
+  );
+}

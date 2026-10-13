@@ -70,7 +70,7 @@
     "expo-task-manager": "~57.0.21",
     "expo-video": "~57.0.5",
     "expo-web-browser": "~57.0.3",
-    "nativewind": "^4.2.3",
+    "nativewind": "^4.2.7",
     "prettier-plugin-tailwindcss": "^0.5.14",
     "react": "19.2.3",
     "react-dom": "19.2.3",
