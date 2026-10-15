@@ -72,10 +72,14 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     // 2. Save to Database
     const newPersonalObject = new PersonalObject({
       patientId: new mongoose.Types.ObjectId(patientId),
+      itemType: itemType || 'object',
+      relationship: relationship || '',
       objectName: objectName || (detectedLabels[0] || 'Unknown Object'),
       detectedLabels,
       detections,
-      imageUrl: `/uploads/${file.filename}` 
+      imageUrl: `/uploads/${file.filename}`,
+      embedding,
+      trainingStatus: embedding.length > 0 ? 'trained' : 'pending'
     });
 
     await newPersonalObject.save();
@@ -93,6 +97,57 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     });
   } catch (err) {
     console.error('Personal Object Upload Error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Find My Things: live scan - localizes the requested item category in the frame
+// (YOLO-World, open-vocabulary) then confirms it's THIS patient's own registered
+// item via embedding similarity, so two patients' "glasses" are never confused.
+router.post('/scan', upload.single('file'), async (req, res) => {
+  const fs2 = require('fs');
+  try {
+    const { patientId, itemName } = req.body || {};
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ success: false, message: 'No frame uploaded' });
+    }
+    if (!patientId || !itemName) {
+      return res.status(400).json({ success: false, message: 'patientId and itemName are required' });
+    }
+
+    const registered = await PersonalObject.find({
+      patientId,
+      objectName: new RegExp(`^${itemName}$`, 'i'),
+      trainingStatus: 'trained',
+      embedding: { $exists: true, $not: { $size: 0 } }
+    });
+
+    if (registered.length === 0) {
+      return res.json({
+        success: true,
+        found: false,
+        message: `"${itemName}" has not been registered with a reference photo yet for this patient`
+      });
+    }
+
+    const knownItems = registered.map(r => ({ id: r._id.toString(), embedding: r.embedding }));
+
+    const formData = new FormData();
+    formData.append('file', fs2.createReadStream(file.path), file.originalname);
+    formData.append('item_name', itemName);
+    formData.append('known_items', JSON.stringify(knownItems));
+    formData.append('patient_id', patientId);
+
+    const aiResponse = await axios.post(`${AI_SERVICE_URL}/scan-for-item`, formData, {
+      headers: { ...formData.getHeaders() },
+      timeout: 45000 // YOLO-World can take longer than 15s on its first call after the ML service restarts (cold model load)
+    });
+
+    res.json({ success: true, ...aiResponse.data });
+  } catch (err) {
+    console.error('Find My Things scan error:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });

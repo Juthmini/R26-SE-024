@@ -16,7 +16,8 @@ import { registerBackgroundAlerts, triggerAlertNow } from '../../../services/bac
 import { type Language } from '../../../constants/translations';
 import { extractObjectKeyword, findAndSpeakLocation, normaliseKeyword } from '../../../services/voiceCommands';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.20.10.3:5000';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.80:5000';
+const AI_URL = process.env.EXPO_PUBLIC_AI_URL || 'http://192.168.1.80:8000';
 const API = `${BASE_URL}/api/admin/behavior`;
 
 const ACTIVITY_ICONS: Record<string, any> = {
@@ -80,7 +81,7 @@ export default function DashboardUI() {
     Speech.speak("Warning. You have wandered too far from home. Contacting your guardian.", { language: 'en-US' });
     Alert.alert("🚨 Geo-Fence Alert", `You are ${dist} meters away from home! Guardian notified.`);
     try {
-      await axios.post('http://172.20.10.3:8000/alert-stranger', {
+      await axios.post(`${AI_URL}/alert-stranger`, {
         patient_id: patient?.customerCode || patient?.id || 'PAT-2026-003',
         image_url: "WANDERING_GEOFENCE_ALERT"
       });
@@ -96,13 +97,14 @@ export default function DashboardUI() {
     else if (hour >= 17 && hour < 21) timeOfDay = "Evening";
 
     try {
-      const res = await axios.post('http://172.20.10.3:8000/predict-behavior', {
+      const res = await axios.post(`${AI_URL}/predict-behavior`, {
         age: patientRef.current.age || 75,
         condition: "Alzheimer's",
         physical_state: "Mobile",
         time_of_day: timeOfDay,
         activity: isWanderingNow ? "Wandering" : "Sitting",
-        duration_mins: 15
+        duration_mins: 15,
+        patient_id: patientRef.current.customerCode || patientRef.current.id || 'PAT-2026-001'
       });
 
       if (res.data && res.data.is_anomaly) {
@@ -153,7 +155,7 @@ export default function DashboardUI() {
         // Background Sync for Camera GPS
         if (patientRef.current) {
           const pId = patientRef.current.customerCode || patientRef.current.id || 'PAT-2026-003';
-          axios.post('http://172.20.10.3:8000/update-location', {
+          axios.post(`${AI_URL}/update-location`, {
             patient_id: pId,
             lat: loc.coords.latitude,
             lng: loc.coords.longitude
@@ -202,7 +204,7 @@ export default function DashboardUI() {
       const pId = patient.customerCode || patient.id || 'PAT-2026-003';
       
       // Assuming ML backend is on 8000
-      const res = await axios.post('http://172.20.10.3:8000/pair-camera', {
+      const res = await axios.post(`${AI_URL}/pair-camera`, {
         device_id: 'CAM-001',
         patient_id: pId
       });
@@ -218,7 +220,7 @@ export default function DashboardUI() {
 
   const disconnectCamera = async () => {
     try {
-      const res = await axios.post('http://172.20.10.3:8000/disconnect-camera', {
+      const res = await axios.post(`${AI_URL}/disconnect-camera`, {
         device_id: 'CAM-001',
         patient_id: patient?.customerCode || patient?.id || 'PAT-2026-003'
       });
@@ -257,7 +259,7 @@ export default function DashboardUI() {
 
       try {
         const pId = p.customerCode || p.id || 'PAT-2026-003';
-        const geoRes = await axios.get(`http://172.20.10.3:8000/geofence/${pId}`);
+        const geoRes = await axios.get(`${AI_URL}/geofence/${pId}`);
         if (geoRes.data?.status === 'success' && geoRes.data?.geofence) {
           setHomeLocation({ lat: geoRes.data.geofence.lat, lng: geoRes.data.geofence.lng });
           setDistanceThreshold(geoRes.data.geofence.threshold);

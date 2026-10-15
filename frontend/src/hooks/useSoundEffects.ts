@@ -1,9 +1,16 @@
-import { Audio } from "expo-av";
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useRef } from "react";
 import { getSoundEffectsEnabled } from "../utils/soundEffectsPreference";
 
 type SoundType = "back" | "success" | "error" | "click";
+
+const soundMap: Record<SoundType, any> = {
+  back: require("@/assets/audio/back.wav"),
+  success: require("@/assets/audio/success.wav"),
+  error: require("@/assets/audio/error.wav"),
+  click: require("@/assets/audio/click.wav"),
+};
 
 async function fireHaptic(type: SoundType) {
   try {
@@ -27,7 +34,7 @@ async function fireHaptic(type: SoundType) {
 }
 
 export const useSoundEffects = () => {
-  const soundsRef = useRef<Record<SoundType, Audio.Sound | null>>({
+  const playersRef = useRef<Record<SoundType, AudioPlayer | null>>({
     back: null,
     success: null,
     error: null,
@@ -35,15 +42,18 @@ export const useSoundEffects = () => {
   });
 
   useEffect(() => {
-    const sounds = soundsRef.current;
+    const players = playersRef.current;
 
-    Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+    }).catch(() => {
+      // audio mode not supported (e.g. web) - ignore
     });
 
     return () => {
-      Object.values(sounds).forEach((sound) => sound?.unloadAsync());
+      // Free the native players when the component using this hook unmounts
+      Object.values(players).forEach((player) => player?.remove());
     };
   }, []);
 
@@ -57,19 +67,17 @@ export const useSoundEffects = () => {
     void fireHaptic(type);
 
     try {
-      if (!soundsRef.current[type]) {
-        const soundMap: Record<SoundType, any> = {
-          back: require("@/assets/audio/back.wav"),
-          success: require("@/assets/audio/success.wav"),
-          error: require("@/assets/audio/error.wav"),
-          click: require("@/assets/audio/click.wav"),
-        };
-
-        const { sound } = await Audio.Sound.createAsync(soundMap[type]);
-        soundsRef.current[type] = sound;
+      // Create the player the first time this sound is needed
+      if (!playersRef.current[type]) {
+        playersRef.current[type] = createAudioPlayer(soundMap[type]);
       }
 
-      await soundsRef.current[type]?.replayAsync();
+      const player = playersRef.current[type];
+      if (!player) return;
+
+      // Rewind to the start, then play (same as expo-av's replayAsync)
+      await player.seekTo(0);
+      player.play();
     } catch (error) {
       console.log("Sound playback error:", error);
     }

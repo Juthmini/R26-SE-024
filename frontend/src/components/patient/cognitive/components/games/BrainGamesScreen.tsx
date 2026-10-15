@@ -10,11 +10,11 @@ import {
 } from "@/src/types/games.types";
 import { generateGamePlan } from "@/src/utils/difficultyEngine";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
-import { Audio } from "expo-av";
+import { useFocusEffect } from "expo-router/react-navigation";
+import { useAudioPlayer } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   LayoutAnimation,
   Platform,
@@ -125,22 +125,8 @@ export default function BrainGamesScreen() {
   }, []);
 
   // --- Sound effect setup ---
-  const soundRef = useRef<Audio.Sound | null>(null);
-
-  React.useEffect(() => {
-    (async () => {
-      const { sound } = await Audio.Sound.createAsync(
-        require("@/assets/audio/click.wav"),
-      );
-      soundRef.current = sound;
-    })();
-
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
+  // useAudioPlayer loads the sound and frees it automatically on unmount
+  const clickPlayer = useAudioPlayer(require("@/assets/audio/click.wav"));
 
   useFocusEffect(
     useCallback(() => {
@@ -151,9 +137,8 @@ export default function BrainGamesScreen() {
   const playSound = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
-      if (soundRef.current) {
-        await soundRef.current.replayAsync();
-      }
+      await clickPlayer.seekTo(0);
+      clickPlayer.play();
     } catch {
       // ignore sound errors
     }

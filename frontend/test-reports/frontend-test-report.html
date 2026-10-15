@@ -1,0 +1,277 @@
+<html><head><meta charset="utf-8"/><title>MemoCare Caregiver Portal - Frontend Test Report</title><style type="text/css">:root {
+  --text-primary: #111;
+  --text-secondary: #4f4f4f;
+  --success: #006633;
+  --success-bright: #80ffbf;
+  --danger: #cc071e;
+  --danger-bright: #fbdfe0;
+  --warning: #995c00;
+  --warning-bright: #ffeea8;
+  --panel: #eee;
+  --border: #949494;
+  --disabled: #6b6b6b;
+}
+
+html,
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-primary);
+}
+body {
+  padding: 2rem 1rem;
+}
+.jesthtml-content {
+  margin: 0 auto;
+  max-width: 70rem;
+}
+header {
+  display: flex;
+  align-items: center;
+}
+#title {
+  margin: 0;
+  flex-grow: 1;
+}
+#logo {
+  height: 4rem;
+}
+#timestamp {
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+}
+
+#metadata-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.additional-information-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+}
+
+/** SUMMARY */
+#summary {
+  color: var(--text-primary);
+  display: flex;
+  font-family: monospace;
+  font-size: 1rem;
+}
+#summary > div {
+  margin-right: 0.5rem;
+  background: var(--panel);
+  padding: 1rem;
+  min-width: 15rem;
+}
+#summary > div:last-child {
+  margin-right: 0;
+}
+@media only screen and (max-width: 720px) {
+  #summary {
+    flex-direction: column;
+  }
+  #summary > div {
+    margin-right: 0;
+    margin-top: 1rem;
+  }
+  #summary > div:first-child {
+    margin-top: 0;
+  }
+}
+
+.summary-total {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+.summary-passed {
+  color: var(--success);
+  border-left: 0.4rem solid var(--success);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-failed,
+.summary-obsolete-snapshots {
+  color: var(--danger);
+  border-left: 0.4rem solid var(--danger);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-pending {
+  color: var(--warning);
+  border-left: 0.4rem solid var(--warning);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-empty {
+  color: var(--disabled);
+  border-left: 0.4rem solid var(--disabled);
+  margin-bottom: 0.15rem;
+}
+
+.test-result {
+  padding: 1rem;
+  margin-bottom: 0.25rem;
+}
+.test-result:last-child {
+  border: 0;
+}
+.test-result.passed {
+  background-color: var(--success-bright);
+  color: var(--success);
+}
+.test-result.failed {
+  background-color: var(--danger-bright);
+  color: var(--danger);
+}
+.test-result.pending {
+  background-color: var(--warning-bright);
+  color: var(--warning);
+}
+
+.test-info {
+  display: flex;
+  justify-content: space-between;
+}
+.test-suitename {
+  width: 20%;
+  text-align: left;
+  font-weight: bold;
+  word-break: break-word;
+}
+.test-title {
+  width: 40%;
+  text-align: left;
+  font-style: italic;
+}
+.test-status {
+  width: 20%;
+  text-align: right;
+}
+.test-duration {
+  width: 10%;
+  text-align: right;
+  font-size: 0.85rem;
+}
+
+.failureMessages {
+  padding: 0 1rem;
+  margin-top: 1rem;
+  border-top: 1px dashed var(--danger);
+}
+.failureMessages.suiteFailure {
+  border-top: none;
+}
+.failureMsg {
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+
+.suite-container {
+  margin-bottom: 1rem;
+}
+.suite-info {
+  padding: 1rem;
+  background-color: var(--panel);
+  color: var(--text-secondary);
+  border: 0.15rem solid;
+  border-color: var(--panel);
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+.suite-info:hover {
+  border-color: var(--border);
+  cursor: pointer;
+}
+.suite-info .suite-path {
+  word-break: break-all;
+  flex-grow: 1;
+  font-family: monospace;
+  font-size: 1rem;
+}
+.suite-info .suite-time {
+  margin-left: 1rem;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.85rem;
+}
+.suite-info .suite-time.warn {
+  background-color: var(--danger);
+  color: #fff;
+}
+.suite-info:before {
+  content: "\2303";
+  display: inline-block;
+  margin-right: 1rem;
+  transform: rotate(180deg) translateY(0.15rem);
+}
+.suite-container[open] .suite-info:before {
+  transform: rotate(0deg) translateY(0.15rem);
+}
+
+/* CONSOLE LOGS */
+.suite-consolelog {
+  margin-bottom: 0.25rem;
+  padding: 1rem;
+  background-color: var(--panel);
+}
+.suite-consolelog-header {
+  font-weight: bold;
+}
+.suite-consolelog-item {
+  padding: 0.5rem;
+}
+.suite-consolelog-item pre {
+  margin: 0.5rem 0;
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+.suite-consolelog-item-origin {
+  color: var(--text-secondary);
+  font-weight: bold;
+}
+.suite-consolelog-item-message {
+  color: var(--text-primary);
+  font-size: 1rem;
+  padding: 0 0.5rem;
+}
+
+/* OBSOLETE SNAPSHOTS */
+.suite-obsolete-snapshots {
+  margin-bottom: 0.25rem;
+  padding: 1rem;
+  background-color: var(--danger-bright);
+  color: var(--danger);
+}
+.suite-obsolete-snapshots-header {
+  font-weight: bold;
+}
+.suite-obsolete-snapshots-item {
+  padding: 0.5rem;
+}
+.suite-obsolete-snapshots-item pre {
+  margin: 0.5rem 0;
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+.suite-obsolete-snapshots-item-message {
+  color: var(--text-primary);
+  font-size: 1rem;
+  padding: 0 0.5rem;
+}
+</style></head><body><main class="jesthtml-content"><header><h1 id="title">MemoCare Caregiver Portal - Frontend Test Report</h1></header><section id="metadata-container"><div id="timestamp">Started: 2026-10-07 17:41:53</div><div id="summary"><div id="suite-summary"><div class="summary-total">Suites (5)</div><div class="summary-passed ">5 passed</div><div class="summary-failed  summary-empty">0 failed</div><div class="summary-pending  summary-empty">0 pending</div></div><div id="test-summary"><div class="summary-total">Tests (62)</div><div class="summary-passed ">62 passed</div><div class="summary-failed  summary-empty">0 failed</div><div class="summary-pending  summary-empty">0 pending</div></div></div></section><details id="suite-1" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\Research\MemoCare-frontend\frontend\tests\cg\unit\llmService.test.ts</div><div class="suite-time">1.687s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">fetchPersonalizedCoach</div><div class="test-title">UT-FE-36 returns the personalised message when the server succeeds</div><div class="test-status">passed</div><div class="test-duration">0.022s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">fetchPersonalizedCoach</div><div class="test-title">UT-FE-37 returns null when the server says AI is unavailable (personalized:null)</div><div class="test-status">passed</div><div class="test-duration">0.002s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">fetchPersonalizedCoach</div><div class="test-title">UT-FE-38 returns null when success is false</div><div class="test-status">passed</div><div class="test-duration">0.002s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">fetchPersonalizedCoach</div><div class="test-title">UT-FE-39 returns null (no crash) when the request throws</div><div class="test-status">passed</div><div class="test-duration">0.003s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">fetchPersonalizedCoach</div><div class="test-title">UT-FE-40 posts to the right URL and sends only id/title/cause/actions (no long reasons)</div><div class="test-status">passed</div><div class="test-duration">0.004s</div></div></div></div></details><details id="suite-2" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\Research\MemoCare-frontend\frontend\tests\cg\unit\recommendationEngine.test.ts</div><div class="suite-time">1.759s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-01 calm day, moderate stress -&gt; no advice cards</div><div class="test-status">passed</div><div class="test-duration">0.038s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-02 sleep under 6h -&gt; sleep card, High priority</div><div class="test-status">passed</div><div class="test-duration">0.002s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-03 sleep of exactly 6h -&gt; NO sleep card (boundary)</div><div class="test-status">passed</div><div class="test-duration"> </div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-04 critical sleep (&lt;=4h) uses the "Severe" title and 8-9 hour advice</div><div class="test-status">passed</div><div class="test-duration">0.002s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-05 emotional overwhelm &gt;= 4 -&gt; emotional card</div><div class="test-status">passed</div><div class="test-duration">0.002s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-06 more than 10 pending tasks -&gt; workload-high only</div><div class="test-status">passed</div><div class="test-duration">0.002s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-07 6-10 pending tasks -&gt; workload-moderate only</div><div class="test-status">passed</div><div class="test-duration">0.002s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-08 zero breaks -&gt; no-breaks card</div><div class="test-status">passed</div><div class="test-duration">0.006s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-09 one break after 6+ caregiving hours -&gt; few-breaks card</div><div class="test-status">passed</div><div class="test-duration">0.002s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-10 low mood (&lt;=2) -&gt; mood card; mood 1 is High priority</div><div class="test-status">passed</div><div class="test-duration">0.006s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-11 physical tiredness &gt;= 4 -&gt; physical card</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-12 4+ difficult situations -&gt; difficult card</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-13 High stress + very high emotional load -&gt; counselling card</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-14 Moderate stress never triggers counselling even with high emotions</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-15 family-support card needs non-Low stress AND more than 5 pending tasks</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-16 5+ caregiving hours -&gt; hydration card</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-17 ML says High but no single cause -&gt; overall-high card</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Individual rules (today's form)</div><div class="test-title">UT-FE-18 Low stress today -&gt; positive "today-low" card</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Weekly trend rules</div><div class="test-title">UT-FE-19 2+ consecutive High days -&gt; sustained-stress card</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Weekly trend rules</div><div class="test-title">UT-FE-20 worsening trend (3+ days, &lt;2 high days) -&gt; trend-worsening card</div><div class="test-status">passed</div><div class="test-duration"> </div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Weekly trend rules</div><div class="test-title">UT-FE-21 worsening trend with &lt;3 days of data -&gt; no trend card</div><div class="test-status">passed</div><div class="test-duration"> </div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Weekly trend rules</div><div class="test-title">UT-FE-22 weekly average sleep &lt;6 but good sleep today -&gt; chronic-sleep card</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Weekly trend rules</div><div class="test-title">UT-FE-23 improving trend -&gt; positive trend-improving card</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Weekly trend rules</div><div class="test-title">UT-FE-24 works without any weekly data (undefined is safe)</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Priority, ordering, limits and feedback</div><div class="test-title">UT-FE-25 today High stress escalates Medium cards to High</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Priority, ordering, limits and feedback</div><div class="test-title">UT-FE-26 weekly High burnout also escalates Medium cards to High</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Priority, ordering, limits and feedback</div><div class="test-title">UT-FE-27 cards are sorted High -&gt; Medium -&gt; Low</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Priority, ordering, limits and feedback</div><div class="test-title">UT-FE-28 never returns more than 7 cards</div><div class="test-status">passed</div><div class="test-duration">0.002s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Priority, ordering, limits and feedback</div><div class="test-title">UT-FE-29 "suppressed" cards (marked not helpful) are removed</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Priority, ordering, limits and feedback</div><div class="test-title">UT-FE-30 "boosted" cards (marked helpful) move to the front</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Priority, ordering, limits and feedback</div><div class="test-title">UT-FE-31 every card has the fields the screen needs</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">getSummaryMessage</div><div class="test-title">UT-FE-32 High stress message shows completion % and difficult situations</div><div class="test-status">passed</div><div class="test-duration">0.002s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">getSummaryMessage</div><div class="test-title">UT-FE-33 Moderate message mentions breaks taken</div><div class="test-status">passed</div><div class="test-duration">0.001s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">getSummaryMessage</div><div class="test-title">UT-FE-34 Low message is the positive one</div><div class="test-status">passed</div><div class="test-duration"> </div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">getSummaryMessage</div><div class="test-title">UT-FE-35 zero assigned tasks does not divide by zero</div><div class="test-status">passed</div><div class="test-duration"> </div></div></div></div></details><details id="suite-3" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\Research\MemoCare-frontend\frontend\tests\cg\component\AiCoachCard.test.tsx</div><div class="suite-time">3.856s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">AiCoachCard</div><div class="test-title">CT-FE-01 shows the personal message when the AI replied</div><div class="test-status">passed</div><div class="test-duration">0.71s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">AiCoachCard</div><div class="test-title">CT-FE-02 shows a "writing" loading state while waiting</div><div class="test-status">passed</div><div class="test-duration">0.127s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">AiCoachCard</div><div class="test-title">CT-FE-03 hides itself completely when the AI is unavailable (safe fallback)</div><div class="test-status">passed</div><div class="test-duration">0.011s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">AiCoachCard</div><div class="test-title">CT-FE-04 does not show the message text while loading</div><div class="test-status">passed</div><div class="test-duration">0.024s</div></div></div></div></details><details id="suite-4" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\Research\MemoCare-frontend\frontend\tests\cg\component\NotificationCard.test.tsx</div><div class="suite-time">4.811s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationCard</div><div class="test-title">CT-FE-05 shows the patient/system name, message and time</div><div class="test-status">passed</div><div class="test-duration">1.343s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationCard</div><div class="test-title">CT-FE-06 an unread notification shows the Acknowledge button</div><div class="test-status">passed</div><div class="test-duration">0.014s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationCard</div><div class="test-title">CT-FE-07 pressing Acknowledge calls onAcknowledge with the notification id</div><div class="test-status">passed</div><div class="test-duration">0.26s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationCard</div><div class="test-title">CT-FE-08 an acknowledged notification shows "Acknowledged" and no button</div><div class="test-status">passed</div><div class="test-duration">0.007s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationCard</div><div class="test-title">CT-FE-09 shows an action button only when hasAction is true, with its label</div><div class="test-status">passed</div><div class="test-duration">0.013s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationCard</div><div class="test-title">CT-FE-10 no action button when hasAction is not set</div><div class="test-status">passed</div><div class="test-duration">0.008s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationCard</div><div class="test-title">CT-FE-11 renders without crashing for severity "urgent"</div><div class="test-status">passed</div><div class="test-duration">0.007s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationCard</div><div class="test-title">CT-FE-11 renders without crashing for severity "warning"</div><div class="test-status">passed</div><div class="test-duration">0.006s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationCard</div><div class="test-title">CT-FE-11 renders without crashing for severity "info"</div><div class="test-status">passed</div><div class="test-duration">0.007s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationSummaryBar</div><div class="test-title">CT-FE-12 shows the three counts with their labels</div><div class="test-status">passed</div><div class="test-duration">0.015s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationSummaryBar</div><div class="test-title">CT-FE-13 pressing a filter passes its type</div><div class="test-status">passed</div><div class="test-duration">0.011s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">NotificationSummaryBar</div><div class="test-title">CT-FE-14 pressing the already-active filter switches back to "all"</div><div class="test-status">passed</div><div class="test-duration">0.008s</div></div></div></div></details><details id="suite-5" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\Research\MemoCare-frontend\frontend\tests\cg\component\BurnoutCard.test.tsx</div><div class="suite-time warn">5.399s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">BurnoutCard</div><div class="test-title">CT-FE-15 shows the score and the risk label for High risk</div><div class="test-status">passed</div><div class="test-duration">0.777s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">BurnoutCard</div><div class="test-title">CT-FE-16 shows the "7-DAY BURNOUT FORECAST" heading and how many days were analysed</div><div class="test-status">passed</div><div class="test-duration">0.009s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">BurnoutCard</div><div class="test-title">CT-FE-17 risk level Low shows label "Low Risk"</div><div class="test-status">passed</div><div class="test-duration">0.007s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">BurnoutCard</div><div class="test-title">CT-FE-17 risk level Moderate shows label "Moderate Risk"</div><div class="test-status">passed</div><div class="test-duration">0.007s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">BurnoutCard</div><div class="test-title">CT-FE-17 risk level High shows label "High Risk"</div><div class="test-status">passed</div><div class="test-duration">0.007s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">BurnoutCard</div><div class="test-title">CT-FE-18 risk factors are hidden until the card is tapped open</div><div class="test-status">passed</div><div class="test-duration">0.019s</div></div></div></div></details></main></body></html>

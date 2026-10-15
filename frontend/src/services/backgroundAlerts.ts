@@ -15,7 +15,7 @@ import Constants from 'expo-constants';
 import axios from 'axios';
 
 export const ALERT_TASK = 'MEMOCARE_VOICE_ALERT';
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.20.10.3:5000';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.80:5000';
 
 // true when running inside the Expo Go sandbox (not a dev/standalone build)
 const isExpoGo = Constants.appOwnership === 'expo';

@@ -11,7 +11,7 @@ import * as Speech from 'expo-speech';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.20.10.3:5000';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.80:5000';
 const API = `${BASE_URL}/api/admin/behavior`;
 
 export default function FaceLoginUI() {

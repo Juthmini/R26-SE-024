@@ -8,6 +8,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import * as Speech from "expo-speech";
+import { speak as speakSinhala } from "../../src/services/memoryAI";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width: W, height: H } = Dimensions.get("window");
@@ -24,6 +25,33 @@ function haversineMetres(lat1, lon1, lat2, lon2) {
 }
 
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+
+// Bilingual voice phrases - every Speech.speak() call in this screen goes
+// through speak(key, ...args) below instead of hardcoded English, so the
+// English/Sinhala toggle actually covers all navigation guidance, not just
+// some of it.
+const PHRASES = {
+  en: {
+    start: (obj: string) => `Starting Navigation to your ${obj}.`,
+    veryClose: (obj: string) => `You are very close! Look around for your ${obj}.`,
+    distanceUpdate: (dm: number, obj: string) => `${dm} metres to your ${obj}.`,
+    foundHere: (obj: string) => `Here! This is your ${obj}!`,
+    locating: () => `Locating your object...`,
+    rightHere: (obj: string) => `Your ${obj} is right here! Look around.`,
+    fullDirection: (obj: string, distance: number, eta: string) =>
+      `Your ${obj} is ${distance} metres away. Estimated ${eta} walking. Follow the yellow arrows.`,
+  },
+  si: {
+    start: (obj: string) => `ඔයාගේ ${obj} වෙත යන්න පටන් ගමු.`,
+    veryClose: (obj: string) => `ඔයා ගොඩක් ළඟයි! ${obj} වටේට හොයන්න.`,
+    distanceUpdate: (dm: number, obj: string) => `${obj} වෙත තව මීටර් ${dm}යි.`,
+    foundHere: (obj: string) => `මෙන්න! මේක තමයි ඔයාගේ ${obj}!`,
+    locating: () => `ඔයාගේ object එක හොයමින්...`,
+    rightHere: (obj: string) => `ඔයාගේ ${obj} මෙන්න මෙතන! වටේට බලන්න.`,
+    fullDirection: (obj: string, distance: number, eta: string) =>
+      `ඔයාගේ ${obj} මීටර් ${distance}ක් දුරින් තියෙනවා. ඇවිදගෙන විනාඩි ${eta} විතර යනවා. කහ arrow ටික follow කරන්න.`,
+  },
+};
 
 export default function ARNavigateScreen() {
   const params = useLocalSearchParams();
@@ -44,6 +72,21 @@ export default function ARNavigateScreen() {
   const [distance, setDistance] = useState(null);
   const [reached, setReached] = useState(false);
   const [viewMode, setViewMode] = useState<'ar' | 'map'>('ar');
+  const [lang, setLang] = useState<'en' | 'si'>('si');
+  const langRef = useRef<'en' | 'si'>('si');
+  useEffect(() => { langRef.current = lang; }, [lang]);
+
+  // Reads from langRef (not `lang` directly) so callbacks registered once on
+  // mount (location/heading watchers) still speak in whichever language is
+  // currently selected, not whatever was selected when they were set up.
+  const speak = useCallback((key: keyof typeof PHRASES['en'], ...args: any[]) => {
+    const activeLang = langRef.current;
+    // @ts-ignore - args shape matches each phrase fn's own params
+    const text = PHRASES[activeLang][key](...args);
+    // iOS has no Sinhala system voice, so Sinhala goes through the AI server's TTS.
+    if (activeLang === 'si') speakSinhala(text, 'si');
+    else Speech.speak(text, { rate: 0.9, language: 'en-US' });
+  }, []);
 
   const arrowAnim = useRef(new Animated.Value(0)).current;
   const reachAnim = useRef(new Animated.Value(0)).current;
@@ -128,11 +171,11 @@ export default function ARNavigateScreen() {
               if (dm <= m && !spokenRef.current.has(m)) {
                 spokenRef.current.add(m);
                 if (m <= 3) {
-                  Speech.speak(`You are very close! Look around for your ${objectName}.`, { rate: 0.9 });
+                  speak('veryClose', objectName);
                   setReached(true);
                   Animated.spring(reachAnim, { toValue: 1, useNativeDriver: true }).start();
                 } else {
-                  Speech.speak(`${dm} metres to your ${objectName}.`, { rate: 0.9 });
+                  speak('distanceUpdate', dm, objectName);
                 }
               }
             });
@@ -166,7 +209,7 @@ export default function ARNavigateScreen() {
               const form = new FormData();
               form.append('file', { uri: snap.uri, name: 'scan.jpg', type: 'image/jpeg' } as any);
               const axios = require('axios');
-              const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.20.10.3:5000';
+              const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.80:5000';
               const res = await axios.post(`${BASE_URL}/api/admin/behavior/detect-objects`, form, {
                 headers: { 'Content-Type': 'multipart/form-data' }, timeout: 5000
               });
@@ -178,7 +221,7 @@ export default function ARNavigateScreen() {
               });
               if (found) {
                 setIsLookingAtObject(true);
-                Speech.speak(`Here! This is your ${objectName}!`, { rate: 0.9 });
+                speak('foundHere', objectName);
                 if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
               }
             }
@@ -201,7 +244,7 @@ export default function ARNavigateScreen() {
 
   useEffect(() => {
     if (!permission?.granted) requestPermission();
-    Speech.speak(`Starting Navigation to your ${objectName}.`, { rate: 0.9 });
+    speak('start', objectName);
   }, []);
 
   if (!permission?.granted) {
@@ -286,6 +329,14 @@ export default function ARNavigateScreen() {
             <Text style={s.headerObj}>{objectName}</Text>
           </View>
           <TouchableOpacity
+            style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, marginRight: 8 }}
+            onPress={() => setLang(l => (l === 'en' ? 'si' : 'en'))}
+          >
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
+              {lang === 'en' ? 'සිංහල' : 'English'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16 }}
             onPress={() => setViewMode(v => v === 'ar' ? 'map' : 'ar')}
           >
@@ -341,11 +392,11 @@ export default function ARNavigateScreen() {
         <TouchableOpacity
           style={s.speakBtn}
           onPress={() => {
-            if (!distance) { Speech.speak("Locating your object..."); return; }
+            if (!distance) { speak('locating'); return; }
             if (distance < 3) {
-              Speech.speak(`Your ${objectName} is right here! Look around.`, { rate: 0.9 });
+              speak('rightHere', objectName);
             } else {
-              Speech.speak(`Your ${objectName} is ${distance} metres away. Estimated ${etaLabel} walking. Follow the yellow arrows.`, { rate: 0.9 });
+              speak('fullDirection', objectName, distance, etaLabel);
             }
           }}
         >

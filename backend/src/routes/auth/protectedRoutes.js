@@ -48,6 +48,7 @@ const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../../middleware/auth');
 const User = require('../../models/auth/User');
+const Patient = require('../../models/caregiver/Patient');
 
 // ✅ Only PATIENTS can access
 router.get('/patient/dashboard',
@@ -94,16 +95,21 @@ router.get('/patients/registered',
   authorize('caregiver'),
   async (req, res) => {
     try {
-      const patients = await User.find({ role: 'patient' })
+      const alreadyAdded = await Patient.distinct('registeredPatientId', {
+        registeredPatientId: { $ne: null },
+      });
+      
+
+      const patients = await User.find({ role: 'patient', _id: { $nin: alreadyAdded } })
         .select('fullName email _id')
         .sort({ fullName: 1 });
 
       res.status(200).json({
         success: true,
         patients: patients.map(p => ({
-          id:       p._id,
+          id: p._id,
           fullName: p.fullName,
-          email:    p.email,
+          email: p.email,
         })),
       });
     } catch (error) {

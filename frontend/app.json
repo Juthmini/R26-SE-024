@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "memocare",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -43,7 +42,6 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.MemoCare"
     },
@@ -74,7 +72,14 @@
           "isAndroidBackgroundLocationEnabled": true
         }
       ],
-      "expo-background-task"
+      "expo-background-task",
+      "expo-video",
+      "expo-asset",
+      "expo-font",
+      "expo-image",
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

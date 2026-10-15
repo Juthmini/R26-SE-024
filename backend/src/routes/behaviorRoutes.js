@@ -227,19 +227,49 @@ router.post('/mobile-login', async (req, res) => {
   try {
     const { registrationNumber } = req.body;
     const patient = await Patient.findOne({ customerCode: registrationNumber });
-    if (!patient) {
-      return res.status(404).json({ success: false, message: 'Patient not registered in the system' });
+    if (patient) {
+      return res.json({
+        success: true,
+        patient: {
+          id: patient._id,
+          name: `${patient.firstName} ${patient.lastName}`,
+          firstName: patient.firstName,
+          customerCode: patient.customerCode,
+          patientImage: patient.patientImage
+        }
+      });
     }
-    res.json({
-      success: true,
-      patient: {
-        id: patient._id,
-        name: `${patient.firstName} ${patient.lastName}`,
-        firstName: patient.firstName,
-        customerCode: patient.customerCode,
-        patientImage: patient.patientImage
+
+    // Fallback: patients registered through the caregiver app (a different
+    // model/collection - see src/models/caregiver/Patient.js) have no
+    // customerCode field at all, but the admin dashboard displays them with
+    // a synthesized "EXT-<last 6 hex of _id>" code (see PatientController.js
+    // getAllPatients). Accept that same code here so those patients can log
+    // into the mobile app too, instead of only ones registered via the
+    // admin form.
+    const code = String(registrationNumber || '').trim().toUpperCase();
+    if (code.startsWith('EXT-')) {
+      const suffix = code.slice(4);
+      const CaregiverPatient = require('../models/caregiver/Patient');
+      const candidates = await CaregiverPatient.find({});
+      const match = candidates.find(
+        (c) => String(c._id).slice(-6).toUpperCase() === suffix
+      );
+      if (match) {
+        return res.json({
+          success: true,
+          patient: {
+            id: match._id,
+            name: match.name,
+            firstName: match.name,
+            customerCode: code,
+            patientImage: null
+          }
+        });
       }
-    });
+    }
+
+    return res.status(404).json({ success: false, message: 'Patient not registered in the system' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
