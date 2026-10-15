@@ -19,13 +19,25 @@ module.exports = {
     Text: AnimatedText,
     createAnimatedComponent: (Component) => Component,
   },
-  useSharedValue: (initial) => ({ value: initial }),
+  useSharedValue: (initial) => {
+    const sv = { value: initial };
+    sv.get = () => sv.value;
+    sv.set = (next) => {
+      sv.value = next;
+    };
+    return sv;
+  },
   useAnimatedStyle: () => ({}),
   useAnimatedProps: () => ({}),
   withTiming: (value) => value,
   withDelay: (_delay, value) => value,
   withRepeat: (value) => value,
   withSequence: (...values) => values[values.length - 1],
+  withSpring: (value) => value,
+  cancelAnimation: () => {},
+  runOnJS: (fn) => fn,
+  interpolate: (_value, _input, output) => output[0],
+  Extrapolation: { CLAMP: 'clamp', EXTEND: 'extend', IDENTITY: 'identity' },
   Easing: chain,
   FadeIn: chain,
   FadeInUp: chain,
@@ -33,4 +45,5 @@ module.exports = {
   FadeInRight: chain,
   FadeOut: chain,
   ZoomIn: chain,
+  BounceIn: chain,
 };

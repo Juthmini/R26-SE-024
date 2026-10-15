@@ -4,5 +4,6 @@ const { View } = require('react-native');
 
 const Svg = (props) => React.createElement(View, props, props.children);
 const Circle = (props) => React.createElement(View, props);
+const Path = (props) => React.createElement(View, props);
 
-module.exports = { __esModule: true, default: Svg, Svg, Circle };
+module.exports = { __esModule: true, default: Svg, Svg, Circle, Path };
