@@ -56,10 +56,10 @@ const createMemory = async (req, res) => {
         patient_name: patient.name,
         hometown: profile.hometown || '',
         tone: 'calm',
-        length: 'short',
+        length: 'long',
       },
       {
-        timeout: 60000,
+        timeout: 180000,
         headers: { 'bypass-tunnel-reminder': 'true' },
       }
     );

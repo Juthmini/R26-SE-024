@@ -13,13 +13,13 @@ import {
 } from '../../types/family.types';
 
 export const getLinkedPatient = (): LinkedPatient => ({
-  id: '6a8eb91cb3e48b7f1a6ccc06',   // real MongoDB ObjectId — matches seeded Patient
-                                     // (also seeded into PatientRegistry with
-                                     // the same id, login code PAT-2026-SHAN)
-  name: 'Shan',
-  initials: 'S',
+  id: '6acf9032783f2eb5bd8edc77',   // real care record on the shared team DB —
+                                     // "Lashan Rashmika", linked to the registered
+                                     // patient login lashan11907@gmail.com
+  name: 'Lashan Rashmika',
+  initials: 'LR',
   avatarColor: '#4F8EF7',
-  age: 74,
+  age: 70,
   condition: 'Moderate',
   stage: 'Early-Mid Stage',
   currentMood: 'happy',
