@@ -133,7 +133,6 @@ export default function PatientRegistration() {
           festivalsCelebrated: step3Data.festivalsCelebrated,
           foodsPreferred: step3Data.foodsPreferred,
           preferredSports: step3Data.preferredSports,
-          languagesPreferred: step3Data.languagesPreferred,
         },
       );
 
@@ -233,6 +232,7 @@ export default function PatientRegistration() {
           {currentStep === 3 && (
             <Step3Preferences
               data={step3Data}
+              showLanguagesPreferred={false}
               onChange={(partial) =>
                 setStep3Data((prev) => ({ ...prev, ...partial }))
               }

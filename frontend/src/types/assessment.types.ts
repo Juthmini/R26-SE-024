@@ -38,6 +38,12 @@ export interface Question {
   referenceAsset?: string;      // image path for drawing question
   instructionSteps?: string[];  // for instruction_action (3-step paper fold)
   phrase?: string;  // for phrase_repeat
+  audioAsset?: string;          // phrase_repeat: bundled clip; absent -> read `phrase` aloud
+  emoji?: string;               // image_mcq: on-device picture when there is no `image` URL
+  variantKey?: string;          // which rotated variant this session got
+  criteria?: string[];          // drawing_canvas: caregiver checklist for this figure
+  figureName?: string;          // drawing_canvas: what the figure is (results screen)
+  questionId?: string;          // backend id (normalized into `id`)
 }
 
 export type SessionStatus = 'idle' | 'active' | 'done' | 'abandoned';
@@ -71,6 +77,7 @@ export interface MMSESession {
   attemptCount: Record<string, number>;
   skipped: string[];
   registrationWords: string[];
+  questionSet?: Question[];     // v2+: the rotated questions this session was given
 
   // Scoring
   sectionScores: SectionScores;

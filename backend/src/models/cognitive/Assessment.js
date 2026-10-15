@@ -27,6 +27,9 @@ const AssessmentSchema = new mongoose.Schema(
     currentQuestionIndex: { type: Number, default: 0 },
     totalQuestions: { type: Number, default: 0 },
     questionSetVersion: { type: Number, default: 1 },
+    // v2+: the exact questions this session was given (variants rotate per
+    // session). Empty on v1 sessions, which use the global question bank.
+    questionSet: { type: [mongoose.Schema.Types.Mixed], default: [] },
 
     answers: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
     answeredAt: { type: Map, of: Number, default: {} },

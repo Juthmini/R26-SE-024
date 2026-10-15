@@ -1,6 +1,7 @@
 import { Question } from '@/src/types/assessment.types';
 import React, { useEffect, useState } from 'react';
 import { Keyboard, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { InfoCard } from '../assessmentUi';
 
 interface Props {
   question: Question;
@@ -26,11 +27,9 @@ export function TextInputRenderer({ question, onAnswer }: Props) {
 
   return (
     <View className="px-6 gap-4">
-      <View className="bg-blue-50 rounded-2xl p-4">
-        <Text className="text-center text-blue-700 font-semibold text-base">
-          {question.subPrompt || 'Write a complete sentence below'}
-        </Text>
-      </View>
+      <InfoCard icon="create-outline">
+        {question.subPrompt || 'Write a complete sentence below'}
+      </InfoCard>
 
       <TextInput
         value={text}
@@ -39,31 +38,41 @@ export function TextInputRenderer({ question, onAnswer }: Props) {
           if (saved) setSaved(false);
         }}
         placeholder="Type your sentence here…"
+        placeholderTextColor="#9ca3af"
+        accessibilityLabel="Your sentence"
         multiline
         textAlignVertical="top"
-        className="border border-gray-300 rounded-2xl px-4 py-3 text-base bg-white"
+        className="border-2 border-blue-300 rounded-3xl px-5 py-4 text-xl bg-white text-gray-900"
         style={{ minHeight: 120 }}
+        maxLength={200}
         autoFocus
+        autoCapitalize="sentences"
+        // A sentence needs no line breaks: the return key saves instead.
+        returnKeyType="done"
+        submitBehavior="blurAndSubmit"
+        onSubmitEditing={save}
         onEndEditing={save}
       />
 
       <TouchableOpacity
         onPress={save}
         disabled={!text.trim()}
-        className={`py-3 rounded-2xl items-center ${
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !text.trim() }}
+        className={`py-4 rounded-2xl items-center ${
           text.trim() ? 'bg-blue-500' : 'bg-gray-300'
         }`}
         activeOpacity={0.7}
       >
-        <Text className="text-white font-semibold text-base">
+        <Text className="text-white font-semibold text-lg">
           {saved ? 'Saved ✓' : 'Save sentence'}
         </Text>
       </TouchableOpacity>
 
       {saved && (
-        <Text className="text-center text-green-600 text-sm">
-          Sentence recorded. Tap “Next” to continue.
-        </Text>
+        <InfoCard icon="checkmark-circle" tone="success" title="Sentence recorded">
+          Tap “Next” to continue.
+        </InfoCard>
       )}
     </View>
   );
