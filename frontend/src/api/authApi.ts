@@ -113,6 +113,7 @@
 // };
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 import { Platform } from "react-native";
 
 const BASE_URL = `${process.env.EXPO_PUBLIC_API_URL}/api`;
@@ -195,6 +196,7 @@ export const loginUser = async (email: string, password: string) => {
     const data = await response.json();
 
     if (data.success) {
+      sessionEnding = false;
       const user = data.data.user ?? {};
       const userId = user._id ?? user.id;
 
@@ -302,19 +304,22 @@ export const authFetch = async (
             },
           });
           return await retryResponse.json();
-        } else {
-          await storage.multiRemove([
-            "accessToken",
-            "refreshToken",
-            "userRole",
-            "userData",
-          ]);
-          return {
-            success: false,
-            message: "Session expired. Please login again.",
-          };
         }
       }
+
+      // No refresh token, or the server rejected it (expired after 7 days,
+      // or replaced by a login on another device).
+      return await endSession(endpoint);
+    }
+
+    // A token we sent was rejected outright - the saved session is unusable.
+    if (
+      token &&
+      !data.success &&
+      (data.message === "Invalid token." ||
+        data.message === "User no longer exists or is deactivated.")
+    ) {
+      return await endSession(endpoint);
     }
 
     return data;
@@ -323,17 +328,39 @@ export const authFetch = async (
   }
 };
 
+const SESSION_KEYS = [
+  "accessToken",
+  "refreshToken",
+  "userRole",
+  "userData",
+  "patient", // or the next person to log in on this phone inherits it
+];
+
+// Several requests usually fail together when a session dies; only the first
+// one should navigate. Reset by loginUser().
+let sessionEnding = false;
+
+// Clear the dead session and send the user back to the login screen, so a
+// restart doesn't reopen a dashboard whose every request fails.
+const endSession = async (endpoint: string) => {
+  await storage.multiRemove(SESSION_KEYS);
+  // logoutUser() navigates by itself.
+  if (!sessionEnding && endpoint !== "/auth/logout") {
+    sessionEnding = true;
+    try {
+      router.replace("/auth/login");
+    } catch {
+      // Navigator not mounted yet - app/index.tsx shows the landing screen.
+    }
+  }
+  return { success: false, message: "Session expired. Please login again." };
+};
+
 export const logoutUser = async () => {
   try {
     await authFetch("/auth/logout", { method: "POST" });
   } catch {}
-  await storage.multiRemove([
-    "accessToken",
-    "refreshToken",
-    "userRole",
-    "userData",
-    "patient", // or the next person to log in on this phone inherits it
-  ]);
+  await storage.multiRemove(SESSION_KEYS);
 };
 
 export const getMe = async () => {

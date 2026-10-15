@@ -203,12 +203,26 @@ export function usePatientProfile(
         sessions.reduce((total, session) => total + getScorePercent(session), 0) /
         sessions.length;
 
+      // sessions[0] is the most recent play.
+      const percents = sessions.map(getScorePercent);
+      const half = Math.ceil(percents.length / 2);
+      const avg = (values: number[]) =>
+        values.reduce((total, value) => total + value, 0) / values.length;
+      const trend =
+        percents.length > 1
+          ? Math.round(avg(percents.slice(0, half)) - avg(percents.slice(half)))
+          : null;
+
       return {
         gameId: gameId as GameId,
         sessions: sessions.length,
         bestScore: `${bestScore}%`,
         lastPlayed: formatRelativeDate(sessions[0]?.completedAt),
         review: getGameReview(averageScore, sessions.length),
+        bestPercent: bestScore,
+        averagePercent: Math.round(averageScore),
+        recentScores: percents.slice(0, 7).reverse(),
+        trend,
       };
     }).filter((review): review is Review => review !== null);
   }, [gameSessions]);

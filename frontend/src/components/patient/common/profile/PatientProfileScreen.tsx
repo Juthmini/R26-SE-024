@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  LayoutChangeEvent,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -10,16 +11,30 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { usePatientProfile } from "../../../../hooks/usePatientProfile";
 import { useSettings } from "../../../../hooks/useSettings";
 import { PatientReportView } from "../../cognitive/components/report/PatientReportView";
 import { GameReviewsSection } from "./sections/GameReviewsSection";
-import { PatientDetailsSection } from "./sections/PatientDetailsSection";
 import { PatientHero } from "./sections/PatientHero";
 import { SettingsSection } from "./sections/SettingsSection";
 import { SeverityCheckSection } from "./sections/SeverityCheckSection";
 
 type ProfileTab = "overview" | "reporting";
+
+const TABS: { key: ProfileTab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: "overview", label: "Overview", icon: "person-outline" },
+  { key: "reporting", label: "Reporting", icon: "bar-chart-outline" },
+];
+const TAB_BAR_PADDING = 4;
+
+// Overview sections slide up one after another on first render.
+const enter = (index: number) => FadeInDown.delay(index * 80).duration(380);
 
 interface PatientProfileScreenProps {
   // When provided (a caregiver viewing a linked patient), loads that
@@ -43,25 +58,45 @@ export default function PatientProfileScreen({
   );
   const { soundEnabled, toggleSound } = useSettings();
   const [tab, setTab] = useState<ProfileTab>("overview");
+  const gamesPlayed = gameReviews.reduce((sum, review) => sum + review.sessions, 0);
+
+  // Sliding white pill behind the active tab.
+  const [tabWidth, setTabWidth] = useState(0);
+  const pillX = useSharedValue(0);
+  useEffect(() => {
+    pillX.value = withTiming(tab === "overview" ? 0 : tabWidth, { duration: 220 });
+  }, [tab, tabWidth, pillX]);
+  const pillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: pillX.value }],
+  }));
+  const onTabBarLayout = (e: LayoutChangeEvent) =>
+    setTabWidth((e.nativeEvent.layout.width - TAB_BAR_PADDING * 2) / 2);
+
+  let section = 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* ── Tab switcher ─────────────────────────────────────────── */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          onPress={() => setTab("overview")}
-          style={[styles.tabButton, tab === "overview" && styles.tabButtonActive]}
-        >
-          <Ionicons name="person-outline" size={15} color={tab === "overview" ? "#fff" : "#64748B"} />
-          <Text style={[styles.tabLabel, tab === "overview" && styles.tabLabelActive]}>Overview</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setTab("reporting")}
-          style={[styles.tabButton, tab === "reporting" && styles.tabButtonActive]}
-        >
-          <Ionicons name="bar-chart-outline" size={15} color={tab === "reporting" ? "#fff" : "#64748B"} />
-          <Text style={[styles.tabLabel, tab === "reporting" && styles.tabLabelActive]}>Reporting</Text>
-        </TouchableOpacity>
+      <View style={styles.tabBar} onLayout={onTabBarLayout}>
+        {tabWidth > 0 && (
+          <Animated.View style={[styles.tabPill, { width: tabWidth }, pillStyle]} />
+        )}
+        {TABS.map(({ key, label, icon }) => {
+          const active = tab === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              onPress={() => setTab(key)}
+              style={styles.tabButton}
+              activeOpacity={0.8}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+            >
+              <Ionicons name={icon} size={16} color={active ? "#1D4ED8" : "#64748B"} />
+              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {tab === "overview" ? (
@@ -70,16 +105,23 @@ export default function PatientProfileScreen({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <PatientHero user={user} readOnly={isCaregiverView} />
-          <PatientDetailsSection user={user} readOnly={isCaregiverView} />
-          <SeverityCheckSection
-            patientId={user.id ?? ""}
-            latestSession={latestSession}
-            showTakeAssessmentCta={!isCaregiverView}
-          />
-          <GameReviewsSection reviews={gameReviews} />
+          <Animated.View entering={enter(section++)}>
+            <PatientHero user={user} gamesPlayed={gamesPlayed} readOnly={isCaregiverView} />
+          </Animated.View>
+          <Animated.View entering={enter(section++)}>
+            <SeverityCheckSection
+              patientId={user.id ?? ""}
+              latestSession={latestSession}
+              showTakeAssessmentCta={!isCaregiverView}
+            />
+          </Animated.View>
+          <Animated.View entering={enter(section++)}>
+            <GameReviewsSection reviews={gameReviews} />
+          </Animated.View>
           {!isCaregiverView && (
-            <SettingsSection soundEnabled={soundEnabled} onToggleSound={toggleSound} />
+            <Animated.View entering={enter(section++)}>
+              <SettingsSection soundEnabled={soundEnabled} onToggleSound={toggleSound} />
+            </Animated.View>
           )}
         </ScrollView>
       ) : (
@@ -109,10 +151,22 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 16,
     marginBottom: 4,
-    backgroundColor: "#EEF2F7",
-    borderRadius: 14,
-    padding: 4,
-    gap: 4,
+    backgroundColor: "#E7ECF4",
+    borderRadius: 16,
+    padding: TAB_BAR_PADDING,
+  },
+  tabPill: {
+    position: "absolute",
+    top: TAB_BAR_PADDING,
+    bottom: TAB_BAR_PADDING,
+    left: TAB_BAR_PADDING,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 2,
   },
   tabButton: {
     flex: 1,
@@ -120,18 +174,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 9,
-    borderRadius: 10,
-  },
-  tabButtonActive: {
-    backgroundColor: "#3B82F6",
+    paddingVertical: 10,
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
     color: "#64748B",
   },
   tabLabelActive: {
-    color: "#fff",
+    color: "#1D4ED8",
+    fontWeight: "800",
   },
 });
