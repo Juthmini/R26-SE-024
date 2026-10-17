@@ -12,10 +12,10 @@ __pycache__
 hardware/
 
 # Runtime data written by the AI memory service
-backend/ml/memory-service/moments_db.json
-backend/ml/memory-service/memory_quiz_db.json
-backend/ml/memory-service/visit_talk_db.json
-backend/ml/memory-service/reminders_db.json
-backend/ml/memory-service/esp32_passive.json
-backend/ml/memory-service/tts_cache/
-backend/ml/memory-service/videos/
+ml-service/memory-service/moments_db.json
+ml-service/memory-service/memory_quiz_db.json
+ml-service/memory-service/visit_talk_db.json
+ml-service/memory-service/reminders_db.json
+ml-service/memory-service/esp32_passive.json
+ml-service/memory-service/tts_cache/
+ml-service/memory-service/videos/

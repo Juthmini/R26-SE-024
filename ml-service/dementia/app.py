@@ -1,7 +1,7 @@
 """
 DEMENTIA ML API (port 5002)
 =============================
-Mirrors backend/ml/caregiver/app.py so it plugs into the same Node -> axios ->
+Mirrors ml-service/caregiver/app.py so it plugs into the same Node -> axios ->
 Flask pattern used for the caregiver stress model (see
 backend/src/services/cognitive/dementiaPrediction/dementiaPredictionService.js).
 

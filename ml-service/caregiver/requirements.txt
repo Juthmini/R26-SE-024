@@ -2,7 +2,8 @@ flask
 flask-cors
 pandas
 numpy
-scikit-learn
+scikit-learn==1.8.0
 imbalanced-learn
 joblib
 openpyxl
+gunicorn

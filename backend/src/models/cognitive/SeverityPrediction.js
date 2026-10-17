@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-// One row per call to the dementia model (backend/ml/dementia/train.py).
+// One row per call to the dementia model (ml-service/dementia/train.py).
 // Persisted so the Reporting tab can chart the result over time, not just
 // show whatever the last live prediction happened to be.
 //

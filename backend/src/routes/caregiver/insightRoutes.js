@@ -5,7 +5,8 @@ const CheckIn = require('../../models/caregiver/CheckIn');
 const { calculateBurnoutRisk } = require('../../utils/burnoutCalculator');
 const { createNotification } = require('../../controllers/caregiver/Notificationcontroller');
 
-const ML_URL = 'http://localhost:5001';
+// Caregiver stress model (ml-service/caregiver). Set CAREGIVER_ML_URL when it runs elsewhere (e.g. Render).
+const ML_URL = process.env.CAREGIVER_ML_URL || 'http://localhost:5001';
 
 // POST /api/caregiver/insights/checkin 
 router.post('/checkin', async (req, res) => {
@@ -21,7 +22,7 @@ router.post('/checkin', async (req, res) => {
 
     // Call ML API
     const mlResponse = await axios.post(
-      `${ML_URL}/predict`, formData, { timeout: 10000 }
+      `${ML_URL}/predict`, formData, { timeout: 70000 } // long enough for a sleeping free-tier host to wake
     );
     const result = mlResponse.data;
 
