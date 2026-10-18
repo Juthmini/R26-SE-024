@@ -21,7 +21,7 @@ import {
   TRIAGE_ORDER,
   TRIAGE_OUTCOME,
 } from "./triageUi";
-import { GlowIcon, GRADIENTS, GradientView, IoniconName } from "./visuals";
+import { GlowIcon, GRADIENTS, IoniconName } from "./visuals";
 
 // The dementia model returns a 2-class triage: keep monitoring at home
 // ("monitor") vs. recommend a clinical review ("escalate"). This card is the
@@ -153,11 +153,8 @@ export const AIPredictionCard = forwardRef<AIPredictionCardHandle, AIPredictionC
     <Animated.View entering={FadeInDown.duration(450)}>
       <AiCardShell subtitle="Your triage result">
         {/* Outcome */}
-        <GradientView
-          colors={outcome.softGradient}
-          className="items-center rounded-3xl px-4 pt-3 pb-5 mb-4"
-        >
-          <GlowIcon colors={outcome.gradient} icon={outcome.icon} size={76} />
+        <View className={`items-center rounded-3xl px-4 pt-3 pb-5 mb-4 ${outcome.tintBg}`}>
+          <GlowIcon colors={[outcome.accent, outcome.accent]} icon={outcome.icon} size={76} />
           <Text className="text-xs font-bold uppercase tracking-widest text-gray-500 mt-1">
             AI recommendation
           </Text>
@@ -182,13 +179,13 @@ export const AIPredictionCard = forwardRef<AIPredictionCardHandle, AIPredictionC
               {Math.round(result.confidence * 100)}% confident
             </Text>
           </View>
-        </GradientView>
+        </View>
 
         <Text className="text-base text-gray-700 leading-relaxed mb-5">
           {result.message}
         </Text>
 
-        {/* Probability breakdown - one stacked gradient bar */}
+        {/* Probability breakdown - one stacked bar */}
         <Text className="text-sm font-semibold text-gray-500 mb-2">
           How the model weighed it
         </Text>
@@ -199,11 +196,10 @@ export const AIPredictionCard = forwardRef<AIPredictionCardHandle, AIPredictionC
             .join(", ")}
         >
           {pcts.map((p) => (
-            <GradientView
+            <View
               key={p.level}
-              colors={TRIAGE_OUTCOME[p.level].gradient}
-              diagonal={false}
-              style={{ width: `${p.pct}%`, height: "100%" }}
+              className={`h-full ${TRIAGE_OUTCOME[p.level].bar}`}
+              style={{ width: `${p.pct}%` }}
             />
           ))}
         </View>
