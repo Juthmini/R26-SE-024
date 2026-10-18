@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,30 +13,118 @@ import {
   View,
 } from 'react-native';
 import { Colors } from '../../src/constants/colors';
-import { getLinkedPatient, getMemoryStories } from '../../src/services/family/familyService';
+import { getLinkedPatient } from '../../src/services/family/familyService';
 import {
+  CategoryRecommendationResponse,
+  FamilyMemoryItem,
+  deleteMemoryById,
   generateStoryFromPhoto,
+  getCategoryRecommendation,
+  getMemoriesForPatient,
   pickPhoto,
 } from '../../src/services/family/storyService';
 import { speakStory, stopSpeaking } from '../../src/services/family/ttsService';
+import { LinkedPatient } from '../../src/types/family.types';
+
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+const CATEGORY_OPTIONS = [
+  { key: 'wedding', label: 'Wedding' },
+  { key: 'festival', label: 'Festival' },
+  { key: 'temple', label: 'Temple' },
+  { key: 'career', label: 'Career' },
+  { key: 'food', label: 'Food' },
+  { key: 'travel', label: 'Travel' },
+  { key: 'birthday', label: 'Birthday' },
+  { key: 'childhood', label: 'Childhood' },
+  { key: 'friends', label: 'Friends' },
+  { key: 'home', label: 'Home' },
+  { key: 'other', label: 'Other' },
+];
+
+const categoryLabel = (key: string) =>
+  CATEGORY_OPTIONS.find((c) => c.key === key)?.label || key;
 
 export default function StoriesScreen() {
-  const router = useRouter();
-  const stories = getMemoryStories();
-  const patient = getLinkedPatient();   // gives us patient.id = 'p-001'
+  const [patient, setPatient] = useState<LinkedPatient | null>(null);
+  const [patientLoading, setPatientLoading] = useState(true);
 
+  const [stories, setStories] = useState<FamilyMemoryItem[]>([]);
+  const [storiesLoading, setStoriesLoading] = useState(true);
   const [playing, setPlaying] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    getLinkedPatient().then(setPatient).finally(() => setPatientLoading(false));
+  }, []);
+
+  const loadStories = () => {
+    if (!patient) return;
+    getMemoriesForPatient(patient.id).then((items) => {
+      setStories(items);
+      setStoriesLoading(false);
+    });
+  };
+
+  useEffect(() => { loadStories(); }, [patient]);
+
+  const handlePlayStory = (story: FamilyMemoryItem) => {
+    if (playing === story._id) {
+      stopSpeaking();
+      setPlaying(null);
+      return;
+    }
+    stopSpeaking();
+    setPlaying(story._id);
+    speakStory(story.generatedStory, () => setPlaying(null));
+  };
+
+  const handleDeleteStory = (story: FamilyMemoryItem) => {
+    Alert.alert(
+      'Delete this story?',
+      'This removes it permanently from the memory vault for both of you.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (playing === story._id) { stopSpeaking(); setPlaying(null); }
+            setDeletingId(story._id);
+            const ok = await deleteMemoryById(story._id);
+            if (ok) {
+              setStories((prev) => prev.filter((s) => s._id !== story._id));
+            } else {
+              Alert.alert('Error', 'Could not delete this story. Try again.');
+            }
+            setDeletingId(null);
+          },
+        },
+      ]
+    );
+  };
 
   // upload state
   const [photo, setPhoto] = useState<any>(null);
   const [familyNote, setFamilyNote] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
 
   // result state
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [generatedStory, setGeneratedStory] = useState('');
   const [voicePlaying, setVoicePlaying] = useState(false);
+
+  // adaptive recommendation — which category tends to lift this patient's
+  // mood the most, based on real past listening sessions
+  const [recommendation, setRecommendation] = useState<CategoryRecommendationResponse | null>(null);
+
+  useEffect(() => {
+    if (!patient) return;
+    getCategoryRecommendation(patient.id).then(setRecommendation);
+  }, [patient]);
 
   const handlePickPhoto = async () => {
     const asset = await pickPhoto();
@@ -48,12 +135,17 @@ export default function StoriesScreen() {
   };
 
   const handleGenerate = async () => {
+    if (!patient) return;
     if (!photo) {
       Alert.alert('Missing', 'Please select a photo first');
       return;
     }
     if (!familyNote.trim()) {
       Alert.alert('Missing', 'Please write a memory note');
+      return;
+    }
+    if (!category) {
+      Alert.alert('Missing', 'Please choose a memory category');
       return;
     }
 
@@ -68,6 +160,7 @@ export default function StoriesScreen() {
         patientId:    patient.id,
         image_base64: photo.base64,
         family_note:  familyNote,
+        category,
       });
 
       if (result.success) {
@@ -75,6 +168,7 @@ export default function StoriesScreen() {
         setStatus('');
         setVoicePlaying(true);
         speakStory(result.memory.generatedStory, () => setVoicePlaying(false));
+        loadStories(); // new story now shows in "Your Stories" immediately
       } else {
         Alert.alert('Error', result.error || 'Could not generate story');
         setStatus('');
@@ -100,12 +194,31 @@ export default function StoriesScreen() {
   const resetModal = () => {
     setPhoto(null);
     setFamilyNote('');
+    setCategory(null);
     setGeneratedStory('');
     setStatus('');
     stopSpeaking();
     setVoicePlaying(false);
     setShowModal(false);
   };
+
+  if (patientLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={Colors.purple} size="large" />
+      </View>
+    );
+  }
+
+  if (!patient) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ fontSize: 14, color: Colors.textMuted, textAlign: 'center' }}>
+          We couldn't find a patient linked to your account. Please check your registration or contact support.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -117,20 +230,6 @@ export default function StoriesScreen() {
           <Text style={{ fontSize: 22, fontWeight: '800', color: Colors.textPrimary }}>Memory Stories</Text>
           <Text style={{ fontSize: 14, color: Colors.textMuted, marginTop: 2 }}>AI-narrated stories in a familiar voice</Text>
         </View>
-
-        {/* TEST LINK — jumps to the standalone patient-side listening demo
-            (frontend/app/patient-view-test.tsx). Not part of the teammate's
-            /patient module. Remove once patient-side testing is done. */}
-        <TouchableOpacity
-          onPress={() => router.push('/patient-view-test')}
-          style={{ margin: 20, marginBottom: 0, backgroundColor: '#F0FDF4', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#BBF7D0' }}
-        >
-          <Ionicons name="person-circle-outline" size={22} color="#16a34a" />
-          <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#15803d' }}>
-            Test: Patient Listening View
-          </Text>
-          <Ionicons name="chevron-forward" size={18} color="#16a34a" />
-        </TouchableOpacity>
 
         {/* Explainer card */}
         <View style={{ margin: 20, backgroundColor: Colors.purple + '15', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: Colors.purple + '30' }}>
@@ -145,6 +244,35 @@ export default function StoriesScreen() {
           </View>
         </View>
 
+        {/* Adaptive recommendation — what's actually working, from real data */}
+        {recommendation && (
+          <View style={{ marginHorizontal: 20, marginBottom: 20, backgroundColor: Colors.purple + '15', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: Colors.purple + '30' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+              <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: Colors.purpleSoft, justifyContent: 'center', alignItems: 'center', flexShrink: 0 }}>
+                <Ionicons name="bulb" size={22} color={Colors.purple} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: Colors.purple, marginBottom: 4 }}>What's Working</Text>
+                {recommendation.recommendation ? (
+                  <Text style={{ fontSize: 12, color: Colors.textSecondary, lineHeight: 18 }}>
+                    {categoryLabel(recommendation.recommendation.category)} stories have lifted {patient.name}'s mood by an average of{' '}
+                    {recommendation.recommendation.avgMoodShiftPercent > 0 ? '+' : ''}
+                    {recommendation.recommendation.avgMoodShiftPercent}% over {recommendation.recommendation.sessionCount} sessions — worth creating another one.
+                  </Text>
+                ) : recommendation.totalSessions === 0 ? (
+                  <Text style={{ fontSize: 12, color: Colors.textSecondary, lineHeight: 18 }}>
+                    Create a few memory stories and let {patient.name} listen to them — we'll start suggesting what works best.
+                  </Text>
+                ) : (
+                  <Text style={{ fontSize: 12, color: Colors.textSecondary, lineHeight: 18 }}>
+                    Still gathering data — a couple more sessions per category will unlock a suggestion.
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* Upload button — connects to modal */}
         <TouchableOpacity
           activeOpacity={0.85}
@@ -155,57 +283,76 @@ export default function StoriesScreen() {
           <Text style={{ fontSize: 15, fontWeight: '800', color: '#fff' }}>Upload Photo & Create Story</Text>
         </TouchableOpacity>
 
-        {/* Stories list */}
+        {/* Stories list — real, deletable memories */}
         <View style={{ marginHorizontal: 20 }}>
           <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textMuted, marginBottom: 10, letterSpacing: 0.5 }}>YOUR STORIES</Text>
-          {stories.map((story) => (
-            <View key={story.id} style={{ backgroundColor: Colors.white, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: Colors.borderLight }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                <View style={{ width: 56, height: 56, borderRadius: 12, backgroundColor: Colors.purpleSoft, justifyContent: 'center', alignItems: 'center' }}>
-                  <Ionicons name="images" size={26} color={Colors.purple} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: Colors.textPrimary, flex: 1 }}>{story.title}</Text>
-                    {story.status === 'new' && (
-                      <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8, backgroundColor: Colors.primaryLight }}>
-                        <Text style={{ fontSize: 9, fontWeight: '800', color: Colors.primary }}>NEW</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>{story.description}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      <Ionicons name="time-outline" size={11} color={Colors.textMuted} />
-                      <Text style={{ fontSize: 11, color: Colors.textMuted }}>{story.duration}</Text>
-                    </View>
-                    {story.moodImpact && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                        <Ionicons name="trending-up" size={11} color={Colors.success} />
-                        <Text style={{ fontSize: 11, color: Colors.success, fontWeight: '700' }}>+{story.moodImpact}% mood</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setPlaying(playing === story.id ? null : story.id)}
-                  style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: playing === story.id ? Colors.success : Colors.purple, justifyContent: 'center', alignItems: 'center' }}
-                >
-                  <Ionicons name={playing === story.id ? 'pause' : 'play'} size={18} color="#fff" />
-                </TouchableOpacity>
-              </View>
 
-              {playing === story.id && (
-                <View style={{ marginTop: 12, backgroundColor: Colors.successSoft, borderRadius: 10, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Ionicons name="volume-high" size={16} color={Colors.success} />
-                  <Text style={{ fontSize: 12, color: Colors.success, fontWeight: '700' }}>Playing in {patient.name}'s room...</Text>
-                  <View style={{ flex: 1, height: 3, backgroundColor: Colors.success + '30', borderRadius: 2, overflow: 'hidden' }}>
-                    <View style={{ width: '45%', height: '100%', backgroundColor: Colors.success, borderRadius: 2 }} />
-                  </View>
-                </View>
-              )}
+          {storiesLoading ? (
+            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+              <ActivityIndicator color={Colors.purple} />
             </View>
-          ))}
+          ) : stories.length === 0 ? (
+            <View style={{ backgroundColor: Colors.white, borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: Colors.borderLight }}>
+              <Ionicons name="images-outline" size={26} color={Colors.textMuted} />
+              <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 8, textAlign: 'center' }}>
+                No stories yet — create one above.
+              </Text>
+            </View>
+          ) : (
+            stories.map((story) => (
+              <View key={story._id} style={{ backgroundColor: Colors.white, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: Colors.borderLight }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                  {story.photoUrl ? (
+                    <Image source={{ uri: story.photoUrl }} style={{ width: 56, height: 56, borderRadius: 12 }} />
+                  ) : (
+                    <View style={{ width: 56, height: 56, borderRadius: 12, backgroundColor: Colors.purpleSoft, justifyContent: 'center', alignItems: 'center' }}>
+                      <Ionicons name="images" size={26} color={Colors.purple} />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: Colors.textPrimary }}>{categoryLabel(story.category)}</Text>
+                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }} numberOfLines={2}>{story.familyNote}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <Ionicons name="calendar-outline" size={11} color={Colors.textMuted} />
+                        <Text style={{ fontSize: 11, color: Colors.textMuted }}>{formatDate(story.createdAt)}</Text>
+                      </View>
+                      {story.playCount > 0 && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                          <Ionicons name="play-circle-outline" size={11} color={Colors.textMuted} />
+                          <Text style={{ fontSize: 11, color: Colors.textMuted }}>{story.playCount} plays</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => handlePlayStory(story)}
+                    style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: playing === story._id ? Colors.success : Colors.purple, justifyContent: 'center', alignItems: 'center' }}
+                  >
+                    <Ionicons name={playing === story._id ? 'stop' : 'play'} size={18} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteStory(story)}
+                    disabled={deletingId === story._id}
+                    style={{ width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}
+                  >
+                    {deletingId === story._id ? (
+                      <ActivityIndicator size="small" color={Colors.danger} />
+                    ) : (
+                      <Ionicons name="trash-outline" size={20} color={Colors.danger} />
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {/* full story text stays visible the whole time it's being read aloud */}
+                {playing === story._id && (
+                  <View style={{ marginTop: 12, backgroundColor: Colors.purpleSoft, borderRadius: 10, padding: 12 }}>
+                    <Text style={{ fontSize: 12, color: Colors.textPrimary, lineHeight: 18, fontStyle: 'italic' }}>"{story.generatedStory}"</Text>
+                  </View>
+                )}
+              </View>
+            ))
+          )}
         </View>
 
       </ScrollView>
@@ -266,6 +413,33 @@ export default function StoriesScreen() {
                 </View>
               )}
             </TouchableOpacity>
+
+            {/* Category picker */}
+            <View style={{ backgroundColor: Colors.white, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: Colors.borderLight }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: Colors.textPrimary, marginBottom: 10 }}>
+                Category
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {CATEGORY_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    onPress={() => setCategory(opt.key)}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      borderRadius: 20,
+                      backgroundColor: category === opt.key ? Colors.primary : Colors.white,
+                      borderWidth: 1,
+                      borderColor: category === opt.key ? Colors.primary : Colors.border,
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: category === opt.key ? '#fff' : Colors.textMuted }}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
             {/* Memory note */}
             <View style={{ backgroundColor: Colors.white, borderRadius: 16, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: Colors.borderLight }}>

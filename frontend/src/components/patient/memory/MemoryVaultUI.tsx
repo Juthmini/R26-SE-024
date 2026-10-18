@@ -1,9 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────
-//  TEST SCREEN — patient-side story listening + emotion capture demo.
-//  Deliberately kept OUTSIDE app/patient/** (that folder belongs to the
-//  patient-portal teammate's work and is not touched here). This is a
-//  standalone route for demoing/testing the real "patient listens, emotion
-//  gets captured" flow using memories already created via the family module.
+//  Patient-side memory listening portal — plays back the AI-narrated
+//  memory stories a family member created, and silently tracks emotion
+//  while the patient listens. New, additive file — does not modify any
+//  other component in this folder.
 // ─────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -12,9 +11,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
-import { speakStory, stopSpeaking } from '../src/services/family/ttsService';
-import EmotionTracker from '../src/components/family/EmotionTracker';
-import { getLinkedPatient } from '../src/services/family/familyService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { speakStory, stopSpeaking } from '../../../services/family/ttsService';
+import EmotionTracker from '../../family/EmotionTracker';
 
 const API_URL = `${process.env.EXPO_PUBLIC_API_URL}/api`;
 
@@ -25,8 +24,18 @@ interface Memory {
   generatedStory: string;
 }
 
-export default function PatientViewTest() {
-  const patient = getLinkedPatient(); // same demo patient the family module uses
+// shape stored by FaceLoginUI/handleIdLogin after a successful login —
+// { id, name, firstName, customerCode, patientImage } — see
+// backend/src/routes/behaviorRoutes.js face-login / mobile-login
+interface LoggedInPatient {
+  id: string;
+  name?: string;
+  firstName?: string;
+}
+
+export default function MemoryVaultUI() {
+  const [patient, setPatient] = useState<LoggedInPatient | null>(null);
+  const [patientLoading, setPatientLoading] = useState(true);
 
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,10 +45,10 @@ export default function PatientViewTest() {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [thankYouFor, setThankYouFor] = useState<string | null>(null);
 
-  const loadMemories = useCallback(async () => {
+  const loadMemories = useCallback(async (patientId: string) => {
     setError('');
     try {
-      const res = await axios.get(`${API_URL}/family/memories/patient/${patient.id}`, { timeout: 10000 });
+      const res = await axios.get(`${API_URL}/family/memories/patient/${patientId}`, { timeout: 10000 });
       if (res.data.success) setMemories(res.data.memories || []);
     } catch {
       setError('Could not load memories. Check your connection.');
@@ -49,7 +58,24 @@ export default function PatientViewTest() {
     }
   }, []);
 
-  useEffect(() => { loadMemories(); }, [loadMemories]);
+  // resolve the actually-logged-in patient (set by FaceLoginUI on
+  // successful face/ID login) instead of a hardcoded demo id
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem('patient');
+        if (stored) {
+          const parsed: LoggedInPatient = JSON.parse(stored);
+          setPatient(parsed);
+          await loadMemories(parsed.id);
+        } else {
+          setLoading(false);
+        }
+      } finally {
+        setPatientLoading(false);
+      }
+    })();
+  }, [loadMemories]);
 
   const playMemory = (memory: Memory) => {
     stopSpeaking();
@@ -72,24 +98,31 @@ export default function PatientViewTest() {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
-        <Text style={styles.title}>Your Memories</Text>
+        <Text style={styles.title}>
+          {patient?.firstName ? `${patient.firstName}'s Memories` : 'Your Memories'}
+        </Text>
         <Text style={styles.subtitle}>Tap Listen to hear a story about a special moment</Text>
       </View>
 
-      {loading ? (
+      {patientLoading || loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.purple} />
           <Text style={styles.loadingText}>Loading your memories...</Text>
         </View>
+      ) : !patient ? (
+        <View style={styles.center}>
+          <Ionicons name="log-in-outline" size={56} color="#CBD5E1" />
+          <Text style={styles.emptyText}>Please log in to see your memories</Text>
+        </View>
       ) : (
         <ScrollView
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadMemories(); }} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadMemories(patient.id); }} />}
         >
           {error ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity onPress={loadMemories} style={styles.retryBtn}>
+              <TouchableOpacity onPress={() => loadMemories(patient.id)} style={styles.retryBtn}>
                 <Text style={styles.retryText}>Try Again</Text>
               </TouchableOpacity>
             </View>

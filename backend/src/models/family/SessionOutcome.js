@@ -30,6 +30,13 @@ const sessionOutcomeSchema = new mongoose.Schema(
       // dominant emotion from the LAST reading in the session
       type: String,
     },
+    mostFrequentEmotion: {
+      // whichever emotion showed up as the dominant reading most often
+      // across the WHOLE session — "what was she mostly feeling", not
+      // just the start/end snapshots
+      type: String,
+      default: null,
+    },
     moodLift: {
       // calculated score: positive = improved mood, 
       // negative = mood declined during the story
@@ -64,6 +71,21 @@ const sessionOutcomeSchema = new mongoose.Schema(
     alertTriggered: {
       type: Boolean,
       default: false,
+    },
+    acknowledged: {
+      type: Boolean,
+      default: false,
+    },
+    actedAt: {
+      // when the family member tapped "Call Now" on this alert
+      type: Date,
+      default: null,
+    },
+    followUpOutcome: {
+      // how the family member said the call went, self-reported afterward
+      type: String,
+      enum: ['positive', 'neutral', 'difficult', null],
+      default: null,
     },
     playbackDurationSeconds: {
       type: Number,

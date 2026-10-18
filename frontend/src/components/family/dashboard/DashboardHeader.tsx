@@ -5,6 +5,8 @@ import { Colors } from '../../../constants/colors';
 
 interface DashboardHeaderProps {
   familyName: string;
+  initials: string;
+  patientName: string | null;
   alertCount: number;
   onNotificationPress: () => void;
   onProfilePress: () => void;
@@ -12,6 +14,8 @@ interface DashboardHeaderProps {
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   familyName,
+  initials,
+  patientName,
   alertCount,
   onNotificationPress,
   onProfilePress,
@@ -45,20 +49,22 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           <Text style={{ fontSize: 22, fontWeight: '800', color: Colors.textPrimary }}>
             {familyName} 👋
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-            <View
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 4,
-                backgroundColor: Colors.success,
-                marginRight: 6,
-              }}
-            />
-            <Text style={{ fontSize: 12, color: Colors.success, fontWeight: '600' }}>
-              Margaret is active now
-            </Text>
-          </View>
+          {patientName && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+              <View
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: Colors.success,
+                  marginRight: 6,
+                }}
+              />
+              <Text style={{ fontSize: 12, color: Colors.success, fontWeight: '600' }}>
+                Linked to {patientName}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Right: Icons */}
@@ -115,7 +121,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                 borderColor: Colors.purple,
               }}
             >
-              <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.purple }}>YO</Text>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.purple }}>{initials}</Text>
             </View>
           </TouchableOpacity>
         </View>

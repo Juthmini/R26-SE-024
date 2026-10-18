@@ -5,8 +5,7 @@ import { Colors } from '../../../constants/colors';
 
 interface QuickActionsProps {
   onStoriesPress: () => void;
-  onMessagesPress: () => void;
-  onUpdatesPress: () => void;
+  onCalendarPress: () => void;
 }
 
 interface ActionButtonProps {
@@ -81,7 +80,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({
 );
 
 export const QuickActions: React.FC<QuickActionsProps> = ({
-  onStoriesPress, onMessagesPress, onUpdatesPress,
+  onStoriesPress, onCalendarPress,
 }) => (
   <View style={{ marginHorizontal: 20, marginTop: 20 }}>
     <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textMuted, marginBottom: 10, letterSpacing: 0.5 }}>
@@ -96,19 +95,11 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         onPress={onStoriesPress}
       />
       <ActionButton
-        icon="chatbubbles"
-        label="Messages"
-        color={Colors.primary}
-        bgColor={Colors.primaryLight}
-        onPress={onMessagesPress}
-        badge={1}
-      />
-      <ActionButton
-        icon="document-text"
-        label="Care Updates"
-        color={Colors.accent}
-        bgColor={Colors.accentSoft}
-        onPress={onUpdatesPress}
+        icon="calendar"
+        label="Calendar"
+        color={Colors.success}
+        bgColor={Colors.successSoft}
+        onPress={onCalendarPress}
       />
     </View>
   </View>

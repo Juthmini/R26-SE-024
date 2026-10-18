@@ -16,6 +16,7 @@ export default function FamilyRegister() {
   const router = useRouter();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [patientEmail, setPatientEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,8 +24,8 @@ export default function FamilyRegister() {
 const handleRegister = async () => {
   console.log('family.tsx: Starting handleRegister...');
   console.log('family.tsx: State =', { fullName, email, passwordLength: password.length, confirmLength: confirmPassword.length });
-  
-  if (!fullName || !email || !password || !confirmPassword) {
+
+  if (!fullName || !email || !patientEmail || !password || !confirmPassword) {
     console.log('family.tsx: Validation FAILED - Missing fields');
     Alert.alert('Error', 'Please fill all fields'); return;
   }
@@ -41,7 +42,7 @@ const handleRegister = async () => {
   setLoading(true);
   try {
     console.log('family.tsx: calling registerUser API...');
-    const result = await registerUser(fullName, email, password, 'family');
+    const result = await registerUser(fullName, email, password, 'family', { patientEmail });
     console.log('family.tsx: registration result:', JSON.stringify(result));
     
     if (result.success) {
@@ -93,6 +94,7 @@ const handleRegister = async () => {
       {[
         { label: 'Full Name', placeholder: 'Enter your full name', value: fullName, setter: setFullName, secure: false, keyboard: 'default' },
         { label: 'Email Address', placeholder: 'Enter your email', value: email, setter: setEmail, secure: false, keyboard: 'email-address' },
+        { label: "Patient's Email Address", placeholder: "Enter the patient's login email", value: patientEmail, setter: setPatientEmail, secure: false, keyboard: 'email-address' },
         { label: 'Password', placeholder: 'Create a password', value: password, setter: setPassword, secure: true, keyboard: 'default' },
         { label: 'Confirm Password', placeholder: 'Confirm your password', value: confirmPassword, setter: setConfirmPassword, secure: true, keyboard: 'default' },
       ].map((field) => (

@@ -27,6 +27,11 @@ const llmRoutes = require("./src/routes/caregiver/llmRoutes");
 const memoryRoutes = require("./src/routes/family/memoryRoutes");
 const familyProfileRoutes = require("./src/routes/family/profileRoutes");
 const emotionRoutes = require("./src/routes/family/emotionRoutes");
+const familyLinkRoutes = require("./src/routes/family/linkRoutes");
+const familyEventRoutes = require("./src/routes/family/eventRoutes");
+const patientEventRoutes = require("./src/routes/patient/eventRoutes");
+const patientMemoryRoutes = require("./src/routes/patient/memoryRoutes");
+const patientEmotionRoutes = require("./src/routes/patient/emotionRoutes");
 
 // Routes from HEAD
 const lifeLoggingRoutes = require('./src/routes/life-logging-memory-vault');
@@ -96,6 +101,15 @@ app.use("/api", protectedRoutes);
 app.use("/api/family/memories", memoryRoutes);
 app.use("/api/family/profile", familyProfileRoutes);
 app.use("/api/family/emotion", emotionRoutes);
+app.use("/api/family/link", familyLinkRoutes);
+
+// Family Calendar Moment Cards
+app.use("/api/family/events", familyEventRoutes);
+app.use("/api/patient/events", patientEventRoutes);
+
+// Patient-side read access to memories a family member created for them
+app.use("/api/patient/memories", patientMemoryRoutes);
+app.use("/api/patient/emotion", patientEmotionRoutes);
 
 // Health check
 app.get("/health", (req, res) => {
