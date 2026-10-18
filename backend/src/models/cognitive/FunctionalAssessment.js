@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 // One row per submission of the Functional Activities Questionnaire (FAQ) -
 // a 10-item, caregiver-answered scale about the patient's day-to-day function.
 // It is the feature that lifts the dementia triage model from ~64% to ~93%
-// accuracy (see backend/ml/dementia/train.py). Stored per patient, tied to the
+// accuracy (see ml-service/dementia/train.py). Stored per patient, tied to the
 // screening-test session it followed, so the predict route can pick up the
 // latest one and the Reporting tab can chart function over time.
 

@@ -1,6 +1,7 @@
 import pandas as pd
 
-df = pd.read_excel('MemoCare_Caregiver_Stress_Dataset_Cleaned (1).xlsx')
+df = pd.read_excel('MemoCare_Caregiver_Stress_Dataset.xlsx')
+df.columns = df.columns.str.strip()
 print(f"Rows: {df.shape[0]}")
 
 print("\nStress score distribution:")

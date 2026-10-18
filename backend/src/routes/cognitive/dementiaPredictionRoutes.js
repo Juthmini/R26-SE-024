@@ -7,8 +7,8 @@ const Patient = require('../../models/caregiver/Patient');
 const SeverityPrediction = require('../../models/cognitive/SeverityPrediction');
 const svc = require('../../services/cognitive/dementiaPrediction/dementiaPredictionService');
 
-// Mirrors backend/ml/caregiver -> backend/src/routes/caregiver/insightRoutes.js.
-// The dementia Flask API (backend/ml/dementia/app.py, port 5002) returns a
+// Mirrors ml-service/caregiver -> backend/src/routes/caregiver/insightRoutes.js.
+// The dementia Flask API (ml-service/dementia/app.py, port 5002) returns a
 // 2-class triage (monitor / escalate, ~93% accuracy). It needs the patient's
 // Functional Activities Questionnaire (FAQ) on file - see POST /faq.
 
@@ -140,7 +140,7 @@ router.post('/predict/:patientId', protect, authorize(...ROLES), verifyOwnsPatie
     if (error.code === 'ECONNREFUSED') {
       return res.status(503).json({
         success: false,
-        message: 'Dementia ML service not running. Start backend/ml/dementia/app.py first.',
+        message: 'Dementia ML service not running. Start ml-service/dementia/app.py first.',
       });
     }
     return res

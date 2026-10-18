@@ -4,8 +4,9 @@ const SeverityPrediction = require('../../../models/cognitive/SeverityPrediction
 const { createHttpError } = require('../validationService');
 
 // Dementia Flask API - own port so it starts/restarts independently of the
-// caregiver stress model. Mirrors backend/ml/caregiver -> insightRoutes.js.
-const ML_URL = 'http://localhost:5002';
+// caregiver stress model. Mirrors ml-service/caregiver -> insightRoutes.js.
+// Dementia model (ml-service/dementia). Set DEMENTIA_ML_URL when it runs elsewhere (e.g. Render).
+const ML_URL = process.env.DEMENTIA_ML_URL || 'http://localhost:5002';
 
 const { FAQ_ITEMS } = FunctionalAssessment; // 10 keys: bills..travel
 
@@ -62,7 +63,8 @@ function buildPayload({ patient, assessment, faq }) {
 
 async function requestPrediction({ patient, assessment, faq }) {
   const payload = buildPayload({ patient, assessment, faq });
-  const res = await axios.post(`${ML_URL}/predict`, payload, { timeout: 10000 });
+  // 70s: long enough for a sleeping free-tier host (Render) to wake up.
+  const res = await axios.post(`${ML_URL}/predict`, payload, { timeout: 70000 });
   return res.data;
 }
 
