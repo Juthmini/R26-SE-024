@@ -1,11 +1,29 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { getStoredRole } from '../../api/authApi';
 import {
-  logEmotionReading,
-  finalizeEmotionSession,
   generateSessionId,
+  logEmotionReading as logEmotionReadingFamily,
+  finalizeEmotionSession as finalizeEmotionSessionFamily,
 } from '../../services/family/emotionService';
+import {
+  logEmotionReading as logEmotionReadingPatient,
+  finalizeEmotionSession as finalizeEmotionSessionPatient,
+} from '../../services/patient/emotionService';
+
+// This component can be mounted from more than one auth context (e.g. a
+// real patient screen logged in as the patient, vs. a family-side screen
+// logged in as the linked family member). Each role's JWT is only accepted
+// by that role's own /api/<role>/emotion/* routes, so the active role is
+// checked per call and routed to the matching service — never assume which
+// one is active.
+async function getEmotionService() {
+  const role = await getStoredRole();
+  return role === 'patient'
+    ? { logEmotionReading: logEmotionReadingPatient, finalizeEmotionSession: finalizeEmotionSessionPatient }
+    : { logEmotionReading: logEmotionReadingFamily, finalizeEmotionSession: finalizeEmotionSessionFamily };
+}
 
 interface EmotionTrackerProps {
   patientId: string;
@@ -81,6 +99,7 @@ export default function EmotionTracker({
         (Date.now() - startTimeRef.current) / 1000
       );
 
+      const { logEmotionReading } = await getEmotionService();
       await logEmotionReading({
         patientId,
         memoryId,
@@ -102,6 +121,7 @@ export default function EmotionTracker({
     }
 
     if (sessionIdRef.current) {
+      const { finalizeEmotionSession } = await getEmotionService();
       const result = await finalizeEmotionSession(sessionIdRef.current);
       if (result.success && onSessionEnd) {
         onSessionEnd(result.outcome);

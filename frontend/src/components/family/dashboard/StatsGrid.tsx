@@ -6,8 +6,6 @@ import { FamilyDashboardStats } from '../../../types/family.types';
 
 interface StatsGridProps {
   stats: FamilyDashboardStats;
-  onReminderPress: () => void;
-  onMedPress: () => void;
   onMoodPress: () => void;
   onAlertPress: () => void;
 }
@@ -68,31 +66,12 @@ const StatCard: React.FC<StatCardProps> = ({
 );
 
 export const StatsGrid: React.FC<StatsGridProps> = ({
-  stats, onReminderPress, onMedPress, onMoodPress, onAlertPress,
+  stats, onMoodPress, onAlertPress,
 }) => (
   <View style={{ marginHorizontal: 20, marginTop: 16 }}>
     <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textMuted, marginBottom: 10, letterSpacing: 0.5 }}>
       TODAY'S OVERVIEW
     </Text>
-    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-      <StatCard
-        label="Reminders"
-        value={stats.reminders}
-        icon="calendar-outline"
-        iconColor={Colors.primary}
-        iconBg={Colors.primaryLight}
-        onPress={onReminderPress}
-      />
-      <StatCard
-        label="Medications"
-        value={stats.pendingMedications}
-        icon="medical-outline"
-        iconColor={Colors.accent}
-        iconBg={Colors.accentSoft}
-        onPress={onMedPress}
-        suffix="pending"
-      />
-    </View>
     <View style={{ flexDirection: 'row', gap: 10 }}>
       <StatCard
         label="Mood Score"
