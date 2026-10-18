@@ -19,3 +19,6 @@ ml-service/memory-service/reminders_db.json
 ml-service/memory-service/esp32_passive.json
 ml-service/memory-service/tts_cache/
 ml-service/memory-service/videos/
+
+# Built APKs
+dist/
