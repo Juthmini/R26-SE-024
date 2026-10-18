@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 interface Step3Props {
     data: Step3Data;
     onChange: (data: Partial<Step3Data>) => void;
+    showLanguagesPreferred?: boolean;
 }
 
 const resolveOpenValue = (
@@ -19,7 +20,7 @@ const resolveOpenValue = (
     current: boolean
 ) => (typeof value === 'function' ? value(current) : value);
 
-export default function Step3Preferences({ data, onChange }: Step3Props) {
+export default function Step3Preferences({ data, onChange, showLanguagesPreferred = true }: Step3Props) {
     const [languagesOpen, setLanguagesOpen] = useState(false);
     const [languageItems, setLanguageItems] = useState(LANGUAGES);
 
@@ -327,6 +328,7 @@ export default function Step3Preferences({ data, onChange }: Step3Props) {
             </View>
 
             {/* Languages Preferred */}
+            {showLanguagesPreferred && (
             <View className="z-[1000]">
                 <Text className="text-sm font-semibold text-gray-800 mb-2">
                     Languages Preferred
@@ -347,6 +349,7 @@ export default function Step3Preferences({ data, onChange }: Step3Props) {
                     listMode="MODAL"
                 />
             </View>
+            )}
         </View>
     );
 }

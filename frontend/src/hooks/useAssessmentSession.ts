@@ -1,5 +1,5 @@
 import { MMSESession, Question } from "@/src/types/assessment.types";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   completeSession as completeSessionApi,
   startSession as startSessionApi,
@@ -31,10 +31,22 @@ function isActiveAssessmentQuestion(question: Question) {
   return ACTIVE_ASSESSMENT_SECTIONS.has(question.section);
 }
 
+// Normalize backend shape -> frontend shape (`questionId` -> `id`).
+function normalizeQuestions(raw: any[]): Question[] {
+  return raw
+    .map((q: any) => ({
+      ...q,
+      id: q.id ?? q.questionId,
+    }))
+    .filter(isActiveAssessmentQuestion);
+}
+
 function reconcileSessionQuestionCount(
   session: MMSESession,
-  totalQuestions: number,
+  bankTotal: number,
 ): MMSESession {
+  // A session with its own question set is sized by that set, not the bank.
+  const totalQuestions = session.questionSet?.length || bankTotal;
   return {
     ...session,
     totalQuestions,
@@ -91,7 +103,9 @@ function buildInitialSession(
 
 export function useAssessmentSession(patientId?: string, caregiverId?: string) {
   const [session, setSession] = useState<MMSESession | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
+  // The global question bank: only used for sessions created before each
+  // session carried its own rotated question set (and to bootstrap loading).
+  const [bankQuestions, setBankQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const questionStartRef = useRef<number>(Date.now());
@@ -114,19 +128,11 @@ export function useAssessmentSession(patientId?: string, caregiverId?: string) {
             ? json.data.questions
             : [];
 
-        // Normalize backend shape -> frontend shape
-        const normalized = rawQuestions
-          .map((q: any) => ({
-            ...q,
-            id: q.id ?? q.questionId,
-          }))
-          .filter(isActiveAssessmentQuestion);
-
-        setQuestions(normalized);
+        setBankQuestions(normalizeQuestions(rawQuestions));
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unknown error");
-        setQuestions([]);
+        setBankQuestions([]);
       }
     };
 
@@ -135,7 +141,7 @@ export function useAssessmentSession(patientId?: string, caregiverId?: string) {
 
   // 2. Initialize session after questions are loaded
   useEffect(() => {
-    if (questions.length === 0) return;
+    if (bankQuestions.length === 0) return;
 
     const initSession = async () => {
       try {
@@ -143,8 +149,8 @@ export function useAssessmentSession(patientId?: string, caregiverId?: string) {
           const stored = await loadSession(patientId, caregiverId);
           setSession(
             stored
-              ? reconcileSessionQuestionCount(stored, questions.length)
-              : buildInitialSession(patientId, caregiverId, questions.length),
+              ? reconcileSessionQuestionCount(stored, bankQuestions.length)
+              : buildInitialSession(patientId, caregiverId, bankQuestions.length),
           );
         } else {
           const active = await loadActiveSession();
@@ -153,14 +159,14 @@ export function useAssessmentSession(patientId?: string, caregiverId?: string) {
             setSession(null);
             return;
           }
-          setSession(reconcileSessionQuestionCount(active, questions.length));
+          setSession(reconcileSessionQuestionCount(active, bankQuestions.length));
         }
         setError(null);
       } catch (err) {
         console.error("Error loading session:", err);
         if (patientId && caregiverId) {
           setSession(
-            buildInitialSession(patientId, caregiverId, questions.length),
+            buildInitialSession(patientId, caregiverId, bankQuestions.length),
           );
         } else {
           setSession(null);
@@ -171,7 +177,17 @@ export function useAssessmentSession(patientId?: string, caregiverId?: string) {
       }
     };
     initSession();
-  }, [questions, patientId, caregiverId]);
+  }, [bankQuestions, patientId, caregiverId]);
+
+  // Each session (v2+) carries the exact, rotated questions it was given -
+  // use those so the screen, scoring and results all match. Older sessions
+  // fall back to the global bank.
+  const questions = useMemo<Question[]>(() => {
+    const set = session?.questionSet;
+    return Array.isArray(set) && set.length > 0
+      ? normalizeQuestions(set)
+      : bankQuestions;
+  }, [session, bankQuestions]);
 
   const startSession = useCallback(
     async (options: StartSessionOptions = {}) => {

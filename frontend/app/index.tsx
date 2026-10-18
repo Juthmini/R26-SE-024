@@ -44,11 +44,40 @@
 //   );
 // }
 
-import { useRouter } from 'expo-router';
-import { Image, Text, TouchableOpacity, View } from 'react-native';
+import { Redirect, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Text, TouchableOpacity, View } from 'react-native';
+import { getAccessToken, getStoredRole } from '../src/api/authApi';
+
+const HOME_BY_ROLE: Record<string, string> = {
+  patient: '/patient/activity-selector',
+  caregiver: '/caregiver',
+  family: '/family',
+};
 
 export default function Index() {
   const router = useRouter();
+  // undefined = still checking, null = no saved session, string = home route
+  const [home, setHome] = useState<string | null | undefined>(undefined);
+
+  // Restore the last logged-in user. loginUser() persists the tokens and role
+  // to AsyncStorage, which survives app restarts; logoutUser() clears them.
+  useEffect(() => {
+    (async () => {
+      const [token, role] = await Promise.all([getAccessToken(), getStoredRole()]);
+      setHome(token && role ? HOME_BY_ROLE[role] ?? null : null);
+    })();
+  }, []);
+
+  if (home === undefined) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
+  if (home) return <Redirect href={home as never} />;
 
   return (
     <View style={{

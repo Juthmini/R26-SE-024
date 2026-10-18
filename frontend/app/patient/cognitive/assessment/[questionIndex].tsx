@@ -12,8 +12,19 @@ import { useAssessmentSession } from "@/src/hooks/useAssessmentSession";
 import { useQuestionTimer } from "@/src/hooks/useQuestionTimer";
 import { Question } from "@/src/types/assessment.types";
 import { useRouter } from "expo-router";
-import React, { useCallback } from "react";
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { CARD_SHADOW } from "@/src/components/patient/cognitive/components/screening-test/assessmentUi";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function QuestionScreen() {
@@ -38,6 +49,26 @@ export default function QuestionScreen() {
     if (isRecallQuestion) return;
     markTimeExpired();
   }, [isRecallQuestion, markTimeExpired]);
+
+  // Hide the Next/Skip footer while typing so the keyboard doesn't squeeze
+  // the answer field; each input renderer has its own submit button.
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, () =>
+      setKeyboardVisible(true),
+    );
+    const hideSub = Keyboard.addListener(hideEvent, () =>
+      setKeyboardVisible(false),
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const timer = useQuestionTimer({
     limitSeconds: currentQuestion?.timeLimit ?? null,
@@ -80,24 +111,27 @@ export default function QuestionScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-gray-50">
-        <Text className="text-gray-500">Loading questions...</Text>
+      <SafeAreaView className="flex-1 items-center justify-center gap-3 bg-slate-50">
+        <ActivityIndicator size="large" color="#3b82f6" />
+        <Text className="text-base text-gray-500">Loading questions…</Text>
       </SafeAreaView>
     );
   }
 
   if (error) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-gray-50">
-        <Text className="text-red-500">{error}</Text>
+      <SafeAreaView className="flex-1 items-center justify-center gap-3 bg-slate-50 px-8">
+        <Ionicons name="cloud-offline-outline" size={48} color="#f43f5e" />
+        <Text className="text-center text-base text-rose-600">{error}</Text>
       </SafeAreaView>
     );
   }
 
   if (!currentQuestion) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-gray-50">
-        <Text className="text-gray-500">No question found.</Text>
+      <SafeAreaView className="flex-1 items-center justify-center gap-3 bg-slate-50">
+        <Ionicons name="help-circle-outline" size={48} color="#9ca3af" />
+        <Text className="text-base text-gray-500">No question found.</Text>
       </SafeAreaView>
     );
   }
@@ -107,9 +141,11 @@ export default function QuestionScreen() {
     ? answered
     : answered || session.timeExpired;
   const canSkip = !answered;
+  const isLast = session.currentQuestionIndex === session.totalQuestions - 1;
+  const canGoBack = session.currentQuestionIndex > 0;
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={["top", "bottom"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "bottom"]}>
       <ProgressBar
         current={session.currentQuestionIndex + 1}
         total={session.totalQuestions}
@@ -124,66 +160,90 @@ export default function QuestionScreen() {
         />
       )}
 
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="pb-8"
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View className="px-6 py-6">
-          <Text className="text-xs font-semibold text-blue-500 uppercase tracking-widest mb-2">
-            {currentQuestion.section}
-          </Text>
-          <Text className="text-2xl font-semibold text-gray-900 leading-snug">
-            {currentQuestion.prompt}
-          </Text>
-        </View>
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="pb-8"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          <View className="px-6 pt-3 pb-5">
+            <Text
+              className="text-[26px] font-bold text-gray-900 leading-tight"
+              accessibilityRole="header"
+            >
+              {currentQuestion.prompt}
+            </Text>
+          </View>
 
-        <View className="mt-2">
           {renderQuestion(currentQuestion, handleAnswer, timer.secondsLeft)}
-        </View>
-      </ScrollView>
+        </ScrollView>
 
-      <View className="px-6 pb-6 pt-3 gap-3 border-t border-gray-100 bg-white">
-        <TouchableOpacity
-          onPress={handleNext}
-          disabled={!canProceed}
-          className={`py-4 rounded-2xl items-center ${
-            canProceed ? "bg-blue-500" : "bg-gray-200"
-          }`}
-        >
-          <Text
-            className={`font-semibold text-base ${
-              canProceed ? "text-white" : "text-gray-400"
-            }`}
+        {!keyboardVisible && (
+          <View
+            className="px-6 pb-4 pt-4 gap-2 bg-white rounded-t-3xl"
+            style={CARD_SHADOW}
           >
-            {session.currentQuestionIndex === session.totalQuestions - 1
-              ? "Finish"
-              : "Next"}
-          </Text>
-        </TouchableOpacity>
+            <View className="flex-row gap-3">
+              {canGoBack && (
+                <TouchableOpacity
+                  onPress={handlePrev}
+                  accessibilityRole="button"
+                  accessibilityLabel="Go back to the previous question"
+                  className="w-14 items-center justify-center rounded-2xl border-2 border-gray-200 bg-white"
+                >
+                  <Ionicons name="arrow-back" size={24} color="#4b5563" />
+                </TouchableOpacity>
+              )}
 
-        <TouchableOpacity
-          onPress={handleSkip}
-          disabled={!canSkip}
-          className={`py-4 rounded-2xl items-center border ${
-            canSkip
-              ? "border-amber-400 bg-amber-50"
-              : "border-gray-200 bg-gray-100"
-          }`}
-        >
-          <Text
-            className={`font-semibold ${canSkip ? "text-amber-700" : "text-gray-400"}`}
-          >
-            Skip question
-          </Text>
-        </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleNext}
+                disabled={!canProceed}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !canProceed }}
+                className={`flex-1 flex-row py-4 rounded-2xl items-center justify-center gap-2 ${
+                  canProceed ? "bg-blue-500" : "bg-gray-200"
+                }`}
+              >
+                <Text
+                  className={`font-bold text-lg ${
+                    canProceed ? "text-white" : "text-gray-400"
+                  }`}
+                >
+                  {isLast ? "Finish" : "Next"}
+                </Text>
+                <Ionicons
+                  name={isLast ? "checkmark-done" : "arrow-forward"}
+                  size={22}
+                  color={canProceed ? "white" : "#9ca3af"}
+                />
+              </TouchableOpacity>
+            </View>
 
-        {session.currentQuestionIndex > 0 && (
-          <TouchableOpacity onPress={handlePrev} className="items-center py-2">
-            <Text className="text-sm text-gray-400">Go back</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleSkip}
+              disabled={!canSkip}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canSkip }}
+              className="flex-row items-center justify-center gap-1.5 py-2"
+            >
+              <Ionicons
+                name="play-skip-forward-outline"
+                size={18}
+                color={canSkip ? "#b45309" : "#d1d5db"}
+              />
+              <Text
+                className={`text-base font-semibold ${canSkip ? "text-amber-700" : "text-gray-300"}`}
+              >
+                Skip this question
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

@@ -1,6 +1,8 @@
 const crypto = require("crypto");
 const Assessment = require("../../models/cognitive/Assessment");
+const User = require("../../models/auth/User");
 const { listActiveQuestions } = require("./questionService");
+const { buildSessionQuestions, recentVariantKeys } = require("./mmse/sessionQuestionBuilder");
 const { buildScoreSnapshot } = require("./scoringService");
 const { createHttpError } = require("./validationService");
 
@@ -8,8 +10,41 @@ async function getActiveQuestions() {
   return listActiveQuestions();
 }
 
+// How many past sessions' variants to steer away from.
+const ROTATION_WINDOW_SESSIONS = 4;
+
+// The questions a given session is scored against: its own saved set (v2+), or
+// the global bank for older sessions created before per-session sets existed.
+async function getSessionQuestions(assessment) {
+  const set = assessment && assessment.questionSet;
+  if (Array.isArray(set) && set.length > 0) return set;
+  return getActiveQuestions();
+}
+
+async function buildQuestionSetForPatient(patientId) {
+  // Rotation/profile lookups are best-effort: a failure here must never block
+  // starting an assessment, it just means less variety this time.
+  let patient = null;
+  let recentKeys = [];
+  try {
+    [patient, recentKeys] = await Promise.all([
+      User.findById(patientId).select("hometown").lean(),
+      Assessment.find({ patientId })
+        .sort({ createdAt: -1 })
+        .limit(ROTATION_WINDOW_SESSIONS)
+        .select("questionSet.variantKey")
+        .lean()
+        .then(recentVariantKeys),
+    ]);
+  } catch (error) {
+    console.warn("[mmse] could not load patient history for rotation:", error.message);
+  }
+  return buildSessionQuestions({ patient, recentKeys, now: new Date() });
+}
+
 async function createAssessmentSession(payload) {
-  const questions = await getActiveQuestions();
+  const questions = await buildQuestionSetForPatient(payload.patientId);
+  const registration = questions.find((q) => q.questionId === "registration");
 
   const doc = await Assessment.create({
     sessionId: crypto.randomUUID(),
@@ -19,8 +54,9 @@ async function createAssessmentSession(payload) {
     totalQuestions: questions.length,
     locale: payload.locale || "en-AU",
     administrationMode: payload.administrationMode || "assisted",
-    registrationWords: ["Apple", "Table", "Penny"],
-    questionSetVersion: 1,
+    registrationWords: registration ? registration.words : [],
+    questionSetVersion: 2,
+    questionSet: questions,
     startedAt: new Date(),
     lastModified: new Date(),
   });
@@ -58,10 +94,9 @@ async function withVersionRetry(apply, retries = 5) {
 }
 
 async function submitAnswer(sessionId, payload) {
-  const questions = await getActiveQuestions();
-
   return withVersionRetry(async () => {
     const assessment = await getAssessmentBySessionId(sessionId);
+    const questions = await getSessionQuestions(assessment);
 
     if (assessment.status === "done") {
       throw createHttpError("Assessment is already completed", 409);
@@ -122,10 +157,9 @@ async function updateProgress(sessionId, payload) {
 }
 
 async function completeAssessment(sessionId) {
-  const questions = await getActiveQuestions();
-
   return withVersionRetry(async () => {
     const assessment = await getAssessmentBySessionId(sessionId);
+    const questions = await getSessionQuestions(assessment);
 
     const snapshot = buildScoreSnapshot(questions, assessment.toObject());
 
@@ -154,4 +188,5 @@ module.exports = {
   updateProgress,
   completeAssessment,
   listAssessmentsByPatient,
+  getSessionQuestions,
 };
