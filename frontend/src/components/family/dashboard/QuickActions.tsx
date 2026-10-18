@@ -7,6 +7,7 @@ interface QuickActionsProps {
   onStoriesPress: () => void;
   onMessagesPress: () => void;
   onUpdatesPress: () => void;
+  onCalendarPress: () => void;
 }
 
 interface ActionButtonProps {
@@ -81,35 +82,50 @@ const ActionButton: React.FC<ActionButtonProps> = ({
 );
 
 export const QuickActions: React.FC<QuickActionsProps> = ({
-  onStoriesPress, onMessagesPress, onUpdatesPress,
+  onStoriesPress, onMessagesPress, onUpdatesPress, onCalendarPress,
 }) => (
   <View style={{ marginHorizontal: 20, marginTop: 20 }}>
     <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textMuted, marginBottom: 10, letterSpacing: 0.5 }}>
       QUICK ACTIONS
     </Text>
-    <View style={{ flexDirection: 'row', gap: 10 }}>
-      <ActionButton
-        icon="mic"
-        label="Memory Stories"
-        color={Colors.purple}
-        bgColor={Colors.purpleSoft}
-        onPress={onStoriesPress}
-      />
-      <ActionButton
-        icon="chatbubbles"
-        label="Messages"
-        color={Colors.primary}
-        bgColor={Colors.primaryLight}
-        onPress={onMessagesPress}
-        badge={1}
-      />
-      <ActionButton
-        icon="document-text"
-        label="Care Updates"
-        color={Colors.accent}
-        bgColor={Colors.accentSoft}
-        onPress={onUpdatesPress}
-      />
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+      <View style={{ flexBasis: '47%', flexGrow: 1 }}>
+        <ActionButton
+          icon="mic"
+          label="Memory Stories"
+          color={Colors.purple}
+          bgColor={Colors.purpleSoft}
+          onPress={onStoriesPress}
+        />
+      </View>
+      <View style={{ flexBasis: '47%', flexGrow: 1 }}>
+        <ActionButton
+          icon="chatbubbles"
+          label="Messages"
+          color={Colors.primary}
+          bgColor={Colors.primaryLight}
+          onPress={onMessagesPress}
+          badge={1}
+        />
+      </View>
+      <View style={{ flexBasis: '47%', flexGrow: 1 }}>
+        <ActionButton
+          icon="document-text"
+          label="Care Updates"
+          color={Colors.accent}
+          bgColor={Colors.accentSoft}
+          onPress={onUpdatesPress}
+        />
+      </View>
+      <View style={{ flexBasis: '47%', flexGrow: 1 }}>
+        <ActionButton
+          icon="calendar"
+          label="Calendar"
+          color={Colors.success}
+          bgColor={Colors.successSoft}
+          onPress={onCalendarPress}
+        />
+      </View>
     </View>
   </View>
 );

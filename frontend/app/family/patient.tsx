@@ -1,33 +1,46 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Image, ScrollView, Share, StatusBar, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, Share, StatusBar, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '../../src/constants/colors';
 import { getLinkedPatient } from '../../src/services/family/familyService';
 import { buildShareableReport, getMemorySessionReports, MemorySessionReport } from '../../src/services/family/emotionService';
 import { MoodTrendChart } from '../../src/components/family/MoodTrendChart';
+import { buildWeeklyMoodHistory, MOOD_EMOJI } from '../../src/utils/moodMapping';
+import { LinkedPatient } from '../../src/types/family.types';
 
-const routineItems = [
-  { time: '8:00 AM',  task: 'Morning medication',    done: true,  icon: 'medical' },
-  { time: '9:30 AM',  task: 'Breakfast & hydration', done: true,  icon: 'restaurant' },
-  { time: '11:00 AM', task: 'Memory story session',  done: true,  icon: 'mic' },
-  { time: '1:00 PM',  task: 'Lunch',                 done: false, icon: 'restaurant' },
-  { time: '3:00 PM',  task: 'Afternoon walk',        done: false, icon: 'walk' },
-  { time: '6:00 PM',  task: 'Evening medication',    done: false, icon: 'medical' },
-];
+// real day labels for the last 7 calendar days, oldest first, ending today —
+// paired index-for-index with buildWeeklyMoodHistory()'s output
+const last7DayLabels = () => {
+  const labels: string[] = [];
+  const today = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    labels.push(d.toLocaleDateString('en-US', { weekday: 'short' }));
+  }
+  return labels;
+};
 
 export default function PatientScreen() {
-  const patient = getLinkedPatient();
+  const [patient, setPatient] = useState<LinkedPatient | null>(null);
+  const [patientLoading, setPatientLoading] = useState(true);
   const [reports, setReports] = useState<MemorySessionReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
 
   useEffect(() => {
+    getLinkedPatient().then(setPatient).finally(() => setPatientLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!patient) return;
     getMemorySessionReports(patient.id)
       .then(setReports)
       .finally(() => setLoadingReports(false));
-  }, [patient.id]);
+  }, [patient]);
 
   const shareReport = async (single?: MemorySessionReport) => {
+    if (!patient) return;
     const text = buildShareableReport(patient.name, single ? [single] : reports);
     try {
       await Share.share({ message: text });
@@ -35,6 +48,26 @@ export default function PatientScreen() {
       // user cancelled the share sheet — nothing to do
     }
   };
+
+  if (patientLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={Colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (!patient) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ fontSize: 14, color: Colors.textMuted, textAlign: 'center' }}>
+          We couldn't find a patient linked to your account. Please check your registration or contact support.
+        </Text>
+      </View>
+    );
+  }
+
+  const weeklyMoods = buildWeeklyMoodHistory(reports);
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -69,16 +102,17 @@ export default function PatientScreen() {
           </View>
         </View>
 
-        {/* 7-day mood */}
+        {/* 7-day mood — real, derived from actual session outcomes; days with
+            no recorded session show a neutral "no data" bucket rather than
+            a guess */}
         <View style={{ marginHorizontal: 20, backgroundColor: Colors.white, borderRadius: 20, padding: 18, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
           <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textMuted, marginBottom: 12, letterSpacing: 0.5 }}>7-DAY MOOD HISTORY</Text>
           <View style={{ flexDirection: 'row', gap: 6 }}>
-            {(['Mon','Tue','Wed','Thu','Fri','Sat','Sun']).map((day, i) => {
-              const emojis = ['😔','😊','😊','😄','😊','😔','😊'];
+            {last7DayLabels().map((day, i) => {
               const isToday = i === 6;
               return (
-                <View key={day} style={{ flex: 1, alignItems: 'center', backgroundColor: isToday ? Colors.primaryLight : Colors.background, borderRadius: 12, paddingVertical: 10, borderWidth: isToday ? 1 : 0, borderColor: Colors.primary }}>
-                  <Text style={{ fontSize: isToday ? 22 : 18 }}>{emojis[i]}</Text>
+                <View key={`${day}-${i}`} style={{ flex: 1, alignItems: 'center', backgroundColor: isToday ? Colors.primaryLight : Colors.background, borderRadius: 12, paddingVertical: 10, borderWidth: isToday ? 1 : 0, borderColor: Colors.primary }}>
+                  <Text style={{ fontSize: isToday ? 22 : 18 }}>{MOOD_EMOJI[weeklyMoods[i]]}</Text>
                   <Text style={{ fontSize: 9, color: isToday ? Colors.primary : Colors.textMuted, fontWeight: '700', marginTop: 4 }}>{day}</Text>
                 </View>
               );
@@ -152,26 +186,35 @@ export default function PatientScreen() {
           )}
         </View>
 
-        {/* Daily Routine */}
+        {/* Daily Routine — real, from the patient's care record */}
         <View style={{ marginHorizontal: 20 }}>
           <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textMuted, marginBottom: 10, letterSpacing: 0.5 }}>TODAY'S ROUTINE</Text>
-          <View style={{ backgroundColor: Colors.white, borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
-            {routineItems.map((item, i) => (
-              <View key={i}>
-                {i > 0 && <View style={{ height: 1, backgroundColor: Colors.borderLight, marginHorizontal: 16 }} />}
-                <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 }}>
-                  <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: item.done ? Colors.successSoft : Colors.background, justifyContent: 'center', alignItems: 'center' }}>
-                    <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={18} color={item.done ? Colors.success : Colors.textMuted} />
+          {patient.routines.length === 0 ? (
+            <View style={{ backgroundColor: Colors.white, borderRadius: 20, padding: 20, alignItems: 'center' }}>
+              <Ionicons name="list-outline" size={26} color={Colors.textMuted} />
+              <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 8, textAlign: 'center' }}>
+                No routine items added yet.
+              </Text>
+            </View>
+          ) : (
+            <View style={{ backgroundColor: Colors.white, borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
+              {patient.routines.map((item, i) => (
+                <View key={`${item.title}-${i}`}>
+                  {i > 0 && <View style={{ height: 1, backgroundColor: Colors.borderLight, marginHorizontal: 16 }} />}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 }}>
+                    <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: item.completed ? Colors.successSoft : Colors.background, justifyContent: 'center', alignItems: 'center' }}>
+                      <Ionicons name="medical" size={18} color={item.completed ? Colors.success : Colors.textMuted} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: item.completed ? Colors.textMuted : Colors.textPrimary, textDecorationLine: item.completed ? 'line-through' : 'none' }}>{item.title}</Text>
+                      <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 1 }}>{item.time}</Text>
+                    </View>
+                    <Ionicons name={item.completed ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={item.completed ? Colors.success : Colors.border} />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: item.done ? Colors.textMuted : Colors.textPrimary, textDecorationLine: item.done ? 'line-through' : 'none' }}>{item.task}</Text>
-                    <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 1 }}>{item.time}</Text>
-                  </View>
-                  <Ionicons name={item.done ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={item.done ? Colors.success : Colors.border} />
                 </View>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          )}
         </View>
 
       </ScrollView>

@@ -86,7 +86,16 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    // ── Caregiver extra fields 
+    // ── Family extra fields
+    // which patient's care record (caregiver/Patient.js) this family member
+    // is linked to, resolved at registration from the patient's own email
+    linkedPatientId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Patient',
+      default: null,
+    },
+
+    // ── Caregiver extra fields
     avatarColor:      { type: String, default: '#2563EB' },
     isOnline:         { type: Boolean, default: true },
     shiftsCompleted:  { type: Number,  default: 0 },

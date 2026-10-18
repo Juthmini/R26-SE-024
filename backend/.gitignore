@@ -50,6 +50,11 @@ web_modules/
 # Generated game images (rebuilt with `npm run seed:images`)
 public/game-images/
 
+# Volunteer photos used for emotion-classifier validation (src/scripts/
+# validateEmotionModel.js) — real people's faces, never committed. Only the
+# aggregate accuracy/confusion-matrix report (validation-results.md) is kept.
+validation-photos/
+
 # Optional npm cache directory
 .npm
 

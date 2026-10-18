@@ -11,10 +11,11 @@ import {
   getEngagementStats,
   recordAction,
 } from '../../src/services/family/emotionService';
-import { EngagementAlert } from '../../src/types/family.types';
+import { EngagementAlert, LinkedPatient } from '../../src/types/family.types';
 
 export default function AlertsScreen() {
-  const patient = getLinkedPatient();
+  const [patient, setPatient] = useState<LinkedPatient | null>(null);
+  const [patientLoading, setPatientLoading] = useState(true);
 
   const [alerts, setAlerts] = useState<EngagementAlert[]>([]);
   const [stats, setStats] = useState<EngagementStats | null>(null);
@@ -22,17 +23,24 @@ export default function AlertsScreen() {
   const [acknowledging, setAcknowledging] = useState<string | null>(null);
   const [calling, setCalling] = useState<string | null>(null);
 
+  useEffect(() => {
+    getLinkedPatient().then(setPatient).finally(() => setPatientLoading(false));
+  }, []);
+
   const loadAlerts = useCallback(() => {
+    if (!patient) return Promise.resolve();
     return getEngagementAlerts(patient.id, patient.name).then(setAlerts);
-  }, [patient.id, patient.name]);
+  }, [patient]);
 
   const loadStats = useCallback(() => {
+    if (!patient) return Promise.resolve();
     return getEngagementStats(patient.id).then(setStats);
-  }, [patient.id]);
+  }, [patient]);
 
   useEffect(() => {
+    if (!patient) return;
     Promise.all([loadAlerts(), loadStats()]).finally(() => setLoading(false));
-  }, [loadAlerts, loadStats]);
+  }, [patient, loadAlerts, loadStats]);
 
   const handleAcknowledge = async (alert: EngagementAlert) => {
     setAcknowledging(alert.id);
@@ -54,6 +62,24 @@ export default function AlertsScreen() {
     }
     setCalling(null);
   };
+
+  if (patientLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={Colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (!patient) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ fontSize: 14, color: Colors.textMuted, textAlign: 'center' }}>
+          We couldn't find a patient linked to your account. Please check your registration or contact support.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>

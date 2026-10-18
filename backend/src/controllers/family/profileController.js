@@ -1,9 +1,13 @@
 const FamilyPatientProfile = require('../../models/family/FamilyPatientProfile');
-const Patient = require('../../models/Patient');
+// NOTE: this must be the caregiver care-record model, not models/Patient.js
+// (the separate, unrelated PatientRegistry/biometric model) — family
+// profiles are keyed to the same Patient this patientId already means
+// everywhere else in the family module.
+const Patient = require('../../models/caregiver/Patient');
 
 const upsertFamilyProfile = async (req, res) => {
   try {
-    const { patientId } = req.params;
+    const patientId = req.linkedPatientId;
     const { spouse, children, hometown, occupation, favouriteFood, importantPlaces } = req.body;
 
     const patient = await Patient.findById(patientId);
@@ -25,7 +29,7 @@ const upsertFamilyProfile = async (req, res) => {
 
 const getFamilyProfile = async (req, res) => {
   try {
-    const { patientId } = req.params;
+    const patientId = req.linkedPatientId;
     const profile = await FamilyPatientProfile.findOne({ patientId });
 
     res.status(200).json({ success: true, profile: profile || null });

@@ -4,7 +4,6 @@ const FamilyPatientProfile = require('../../models/family/FamilyPatientProfile')
 const SessionOutcome = require('../../models/family/SessionOutcome');
 const axios = require('axios');
 const cloudinary = require('../../config/cloudinary');
-const mongoose = require('mongoose');
 
 // a category needs at least this many completed sessions before it's
 // confident enough to recommend — avoids a single lucky/unlucky session
@@ -16,12 +15,15 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL;
 // --- CREATE memory + generate story ---
 const createMemory = async (req, res) => {
   try {
-    const { patientId, familyNote, imageBase64, category } = req.body;
+    const { familyNote, imageBase64, category } = req.body;
+    // patientId is derived from the authenticated family account's
+    // linkedPatientId, never trusted from the request body
+    const patientId = req.linkedPatientId;
 
     if (!patientId || !familyNote || !imageBase64) {
       return res.status(400).json({
         success: false,
-        message: 'patientId, familyNote and imageBase64 are required',
+        message: 'familyNote and imageBase64 are required',
       });
     }
 
@@ -73,7 +75,7 @@ const createMemory = async (req, res) => {
 
     const memory = await Memory.create({
       patientId,
-      uploadedBy: req.user ? req.user._id : new mongoose.Types.ObjectId(),
+      uploadedBy: req.user.userId,
       photoUrl: uploadResult.secure_url,
       familyNote,
       category: category || 'other',
@@ -92,7 +94,10 @@ const createMemory = async (req, res) => {
 // --- GET all memories for a patient ---
 const getMemoriesByPatient = async (req, res) => {
   try {
-    const { patientId } = req.params;
+    // patientId is derived from the authenticated family user's
+    // linkedPatientId — the :patientId URL param is kept for URL-shape
+    // compatibility only and is not trusted
+    const patientId = req.linkedPatientId;
 
     const memories = await Memory.find({ patientId })
       .sort({ createdAt: -1 });
@@ -108,7 +113,7 @@ const getMemoriesByPatient = async (req, res) => {
 //     knows what kind of story tends to work best ---
 const getCategoryRecommendation = async (req, res) => {
   try {
-    const { patientId } = req.params;
+    const patientId = req.linkedPatientId;
 
     const outcomes = await SessionOutcome.find({ patientId })
       .populate('memoryId', 'category');
@@ -152,6 +157,12 @@ const getMemoryById = async (req, res) => {
         message: 'Memory not found',
       });
     }
+    if (memory.patientId.toString() !== req.linkedPatientId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view this memory',
+      });
+    }
 
     res.status(200).json({ success: true, memory });
   } catch (error) {
@@ -162,18 +173,25 @@ const getMemoryById = async (req, res) => {
 // --- UPDATE play count ---
 const incrementPlayCount = async (req, res) => {
   try {
-    const memory = await Memory.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { playCount: 1 } },
-      { new: true }
-    );
-
-    if (!memory) {
+    const existing = await Memory.findById(req.params.id);
+    if (!existing) {
       return res.status(404).json({
         success: false,
         message: 'Memory not found',
       });
     }
+    if (existing.patientId.toString() !== req.linkedPatientId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this memory',
+      });
+    }
+
+    const memory = await Memory.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { playCount: 1 } },
+      { new: true }
+    );
 
     res.status(200).json({ success: true, memory });
   } catch (error) {
@@ -184,14 +202,21 @@ const incrementPlayCount = async (req, res) => {
 // --- DELETE memory ---
 const deleteMemory = async (req, res) => {
   try {
-    const memory = await Memory.findByIdAndDelete(req.params.id);
-
-    if (!memory) {
+    const existing = await Memory.findById(req.params.id);
+    if (!existing) {
       return res.status(404).json({
         success: false,
         message: 'Memory not found',
       });
     }
+    if (existing.patientId.toString() !== req.linkedPatientId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to delete this memory',
+      });
+    }
+
+    await Memory.findByIdAndDelete(req.params.id);
 
     res.status(200).json({ success: true, message: 'Memory deleted' });
   } catch (error) {

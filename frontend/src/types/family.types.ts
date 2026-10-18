@@ -15,6 +15,12 @@ export interface FamilyMember {
 export type PatientCondition = 'Mild' | 'Moderate' | 'Severe' | 'Stable' | 'Critical';
 export type PatientMood = 'awful' | 'sad' | 'neutral' | 'happy' | 'great';
 
+export interface PatientRoutine {
+  title: string;
+  time: string;
+  completed: boolean;
+}
+
 export interface LinkedPatient {
   id: string;
   name: string;
@@ -27,13 +33,12 @@ export interface LinkedPatient {
   moodEmoji: string;
   lastUpdated: string;
   moodHistory: PatientMood[]; // last 7 days
+  routines: PatientRoutine[];
 }
 
 // ── Dashboard Stats ───────────────────────────────────────────────────────────
 export interface FamilyDashboardStats {
-  reminders: number;
-  pendingMedications: number;
-  moodScore: number;        // 0-100
+  moodScore: number;        // 0-100, real — latest session's happyAfterPercent
   activeAlerts: number;
 }
 
@@ -72,19 +77,6 @@ export interface EngagementAlert {
   followUpOutcome: 'positive' | 'neutral' | 'difficult' | null;
 }
 
-// ── Feedback & Adaptive Learning ─────────────────────────────────────────────
-export interface SessionFeedback {
-  id: string;
-  date: string;
-  storyTitle: string;
-  moodBefore: number;
-  moodAfter: number;
-  callDuration?: number;    // minutes
-  positiveExtended: boolean;
-  cognitiveScoreChange: number; // delta
-  insight: string;          // AI generated text insight
-}
-
 // ── Care Updates ─────────────────────────────────────────────────────────────
 export type UpdateSeverity = 'info' | 'warning' | 'positive';
 
@@ -116,4 +108,40 @@ export interface QuickAction {
   color: string;
   bgColor: string;
   route?: string;
+}
+
+// ── Family Calendar Moment Cards ──────────────────────────────────────────────
+export type EventType = 'birthday' | 'anniversary' | 'festival' | 'religious' | 'other';
+export type EventStatus = 'scheduled' | 'shown' | 'completed' | 'snoozed' | 'missed';
+export type ReactionType = 'emoji' | 'voice' | 'video' | 'skipped';
+export type EmojiReaction = 'happy' | 'calm' | 'sad';
+
+export interface FamilyEvent {
+  id: string;
+  title: string;
+  eventType: EventType;
+  personName: string;
+  relation: string;
+  eventDate: string;       // ISO date string
+  eventTime: string;       // stored 24-hour "HH:mm"
+  scheduledAt: string | null; // real combined date+time instant; null for pre-existing events saved before this existed
+  note: string;            // max 200 chars
+  photoUrl: string;
+  sensitive: boolean;      // calm theme, no voice-wish prompt, when true
+  cardText: string;        // plain-template sentence shown on the Moment Card
+  cardTextSource: 'template' | 'ai'; // 'ai' only when the opt-in AI call actually succeeded
+  theme: string;           // 'calm' when sensitive, else mirrors eventType
+  status: EventStatus;
+  createdAt: string;
+}
+
+export interface EventReaction {
+  id: string;
+  event: string;           // FamilyEvent id
+  type: ReactionType;
+  emoji: EmojiReaction | null;
+  mediaUrl: string;        // voice/video clip URL, when present
+  durationSeconds: number;
+  seenByFamilyAt: string | null;
+  createdAt: string;
 }

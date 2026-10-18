@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
+const { protect, authorize, resolveLinkedPatient } = require('../../middleware/auth');
 const {
   warmupEmotionService,
   captureEmotion,
@@ -12,6 +13,8 @@ const {
   recordFollowUp,
   getEngagementStats,
 } = require('../../controllers/family/emotionController');
+
+router.use(protect, authorize('family'), resolveLinkedPatient);
 
 router.get('/warmup', warmupEmotionService);
 router.post('/capture', captureEmotion);

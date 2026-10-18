@@ -1,7 +1,5 @@
-import axios from 'axios';
+import { authFetch } from '../../api/authApi';
 import { EngagementAlert } from '../../types/family.types';
-
-const API_URL = `${process.env.EXPO_PUBLIC_API_URL}/api`;
 
 const timeAgo = (iso: string) => {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -53,8 +51,8 @@ export const getLatestEngagementAlert = async (
   patientName: string
 ): Promise<EngagementAlert | null> => {
   try {
-    const response = await axios.get(`${API_URL}/family/emotion/outcomes/${patientId}`);
-    const outcomes = response.data?.outcomes || [];
+    const data = await authFetch(`/family/emotion/outcomes/${patientId}`);
+    const outcomes = data?.outcomes || [];
     if (outcomes.length === 0) return null;
 
     return mapOutcomeToAlert(outcomes[0], patientName);
@@ -71,8 +69,8 @@ export const getEngagementAlerts = async (
   patientName: string
 ): Promise<EngagementAlert[]> => {
   try {
-    const response = await axios.get(`${API_URL}/family/emotion/outcomes/${patientId}`);
-    const outcomes = response.data?.outcomes || [];
+    const data = await authFetch(`/family/emotion/outcomes/${patientId}`);
+    const outcomes = data?.outcomes || [];
     return outcomes
       .filter((o: any) => o.alertTriggered)
       .map((o: any) => mapOutcomeToAlert(o, patientName));
@@ -85,8 +83,8 @@ export const getEngagementAlerts = async (
 // marks an alert as handled so it stops showing as the active card
 export const acknowledgeAlert = async (outcomeId: string): Promise<boolean> => {
   try {
-    const response = await axios.patch(`${API_URL}/family/emotion/outcomes/${outcomeId}/acknowledge`);
-    return !!response.data?.success;
+    const data = await authFetch(`/family/emotion/outcomes/${outcomeId}/acknowledge`, { method: 'PATCH' });
+    return !!data?.success;
   } catch (error: any) {
     console.error('Acknowledge alert error:', error.message);
     return false;
@@ -97,8 +95,8 @@ export const acknowledgeAlert = async (outcomeId: string): Promise<boolean> => {
 // acknowledges it server-side, so the same card doesn't linger afterward
 export const recordAction = async (outcomeId: string): Promise<boolean> => {
   try {
-    const response = await axios.patch(`${API_URL}/family/emotion/outcomes/${outcomeId}/act`);
-    return !!response.data?.success;
+    const data = await authFetch(`/family/emotion/outcomes/${outcomeId}/act`, { method: 'PATCH' });
+    return !!data?.success;
   } catch (error: any) {
     console.error('Record action error:', error.message);
     return false;
@@ -111,10 +109,11 @@ export const recordFollowUp = async (
   outcome: 'positive' | 'neutral' | 'difficult'
 ): Promise<boolean> => {
   try {
-    const response = await axios.patch(`${API_URL}/family/emotion/outcomes/${outcomeId}/followup`, {
-      followUpOutcome: outcome,
+    const data = await authFetch(`/family/emotion/outcomes/${outcomeId}/followup`, {
+      method: 'PATCH',
+      body: JSON.stringify({ followUpOutcome: outcome }),
     });
-    return !!response.data?.success;
+    return !!data?.success;
   } catch (error: any) {
     console.error('Record follow-up error:', error.message);
     return false;
@@ -134,8 +133,8 @@ export interface EngagementStats {
 // evidence behind the "predictive engagement" claim
 export const getEngagementStats = async (patientId: string): Promise<EngagementStats | null> => {
   try {
-    const response = await axios.get(`${API_URL}/family/emotion/engagement-stats/${patientId}`);
-    return response.data?.success ? response.data.stats : null;
+    const data = await authFetch(`/family/emotion/engagement-stats/${patientId}`);
+    return data?.success ? data.stats : null;
   } catch (error: any) {
     console.error('Fetch engagement stats error:', error.message);
     return null;
@@ -146,7 +145,7 @@ export const getEngagementStats = async (patientId: string): Promise<EngagementS
 // real-time capture starts. Fire-and-forget — caller shouldn't await the
 // actual wake-up, just kick it off as early as possible.
 export const warmupEmotionService = () => {
-  axios.get(`${API_URL}/family/emotion/warmup`).catch(() => {});
+  authFetch('/family/emotion/warmup').catch(() => {});
 };
 
 export const logEmotionReading = async (data: {
@@ -157,12 +156,10 @@ export const logEmotionReading = async (data: {
   photoBase64: string;
 }) => {
   try {
-    const response = await axios.post(
-      `${API_URL}/family/emotion/capture`,
-      data,
-      { timeout: 90000 }
-    );
-    return response.data;
+    return await authFetch('/family/emotion/capture', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   } catch (error: any) {
     console.error('Emotion capture error:', error.message);
     return { success: false };
@@ -171,10 +168,10 @@ export const logEmotionReading = async (data: {
 
 export const finalizeEmotionSession = async (sessionId: string) => {
   try {
-    const response = await axios.post(`${API_URL}/family/emotion/finalize`, {
-      sessionId,
+    return await authFetch('/family/emotion/finalize', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
     });
-    return response.data;
   } catch (error: any) {
     console.error('Finalize session error:', error.message);
     return { success: false };
@@ -190,12 +187,14 @@ export interface MemorySessionReport {
   storyTitle: string;
   photoUrl: string;
   date: string;
+  rawCreatedAt: string;      // ISO timestamp — for real day-bucketing (date above is display-formatted)
   triggeredAt: string;
   baselineEmotion: string;
   peakEmotion: string;
   finalEmotion: string;
   mostFrequentEmotion: string | null;
   moodShiftPercent: number;
+  happyAfterPercent: number; // real 0-100 confidence, used for the dashboard's Mood Score stat
   totalReadings: number;
   category: string;
 }
@@ -208,19 +207,21 @@ const formatReportDate = (iso: string) =>
 // here since the backend already sorts newest-first
 export const getMemorySessionReports = async (patientId: string): Promise<MemorySessionReport[]> => {
   try {
-    const response = await axios.get(`${API_URL}/family/emotion/outcomes/${patientId}`);
-    const outcomes = response.data?.outcomes || [];
+    const data = await authFetch(`/family/emotion/outcomes/${patientId}`);
+    const outcomes = data?.outcomes || [];
     return outcomes.map((o: any) => ({
       id: o._id,
       storyTitle: o.memoryId?.familyNote || 'A memory story',
       photoUrl: o.memoryId?.photoUrl || '',
       date: formatReportDate(o.createdAt),
+      rawCreatedAt: o.createdAt,
       triggeredAt: timeAgo(o.createdAt),
       baselineEmotion: o.baselineEmotion,
       peakEmotion: o.peakEmotion,
       finalEmotion: o.finalEmotion,
       mostFrequentEmotion: o.mostFrequentEmotion || null,
       moodShiftPercent: o.moodShiftPercent ?? 0,
+      happyAfterPercent: o.happyAfterPercent ?? 0,
       totalReadings: o.totalReadings,
       category: o.memoryId?.category || 'other',
     }));

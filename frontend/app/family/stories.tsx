@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -25,6 +24,7 @@ import {
   pickPhoto,
 } from '../../src/services/family/storyService';
 import { speakStory, stopSpeaking } from '../../src/services/family/ttsService';
+import { LinkedPatient } from '../../src/types/family.types';
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -47,8 +47,8 @@ const categoryLabel = (key: string) =>
   CATEGORY_OPTIONS.find((c) => c.key === key)?.label || key;
 
 export default function StoriesScreen() {
-  const router = useRouter();
-  const patient = getLinkedPatient();   // gives us patient.id = 'p-001'
+  const [patient, setPatient] = useState<LinkedPatient | null>(null);
+  const [patientLoading, setPatientLoading] = useState(true);
 
   const [stories, setStories] = useState<FamilyMemoryItem[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(true);
@@ -56,14 +56,19 @@ export default function StoriesScreen() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
 
+  useEffect(() => {
+    getLinkedPatient().then(setPatient).finally(() => setPatientLoading(false));
+  }, []);
+
   const loadStories = () => {
+    if (!patient) return;
     getMemoriesForPatient(patient.id).then((items) => {
       setStories(items);
       setStoriesLoading(false);
     });
   };
 
-  useEffect(() => { loadStories(); }, [patient.id]);
+  useEffect(() => { loadStories(); }, [patient]);
 
   const handlePlayStory = (story: FamilyMemoryItem) => {
     if (playing === story._id) {
@@ -117,8 +122,9 @@ export default function StoriesScreen() {
   const [recommendation, setRecommendation] = useState<CategoryRecommendationResponse | null>(null);
 
   useEffect(() => {
+    if (!patient) return;
     getCategoryRecommendation(patient.id).then(setRecommendation);
-  }, [patient.id]);
+  }, [patient]);
 
   const handlePickPhoto = async () => {
     const asset = await pickPhoto();
@@ -129,6 +135,7 @@ export default function StoriesScreen() {
   };
 
   const handleGenerate = async () => {
+    if (!patient) return;
     if (!photo) {
       Alert.alert('Missing', 'Please select a photo first');
       return;
@@ -195,6 +202,24 @@ export default function StoriesScreen() {
     setShowModal(false);
   };
 
+  if (patientLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={Colors.purple} size="large" />
+      </View>
+    );
+  }
+
+  if (!patient) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ fontSize: 14, color: Colors.textMuted, textAlign: 'center' }}>
+          We couldn't find a patient linked to your account. Please check your registration or contact support.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <StatusBar barStyle="dark-content" />
@@ -205,20 +230,6 @@ export default function StoriesScreen() {
           <Text style={{ fontSize: 22, fontWeight: '800', color: Colors.textPrimary }}>Memory Stories</Text>
           <Text style={{ fontSize: 14, color: Colors.textMuted, marginTop: 2 }}>AI-narrated stories in a familiar voice</Text>
         </View>
-
-        {/* TEST LINK — jumps to the standalone patient-side listening demo
-            (frontend/app/patient-view-test.tsx). Not part of the teammate's
-            /patient module. Remove once patient-side testing is done. */}
-        <TouchableOpacity
-          onPress={() => router.push('/patient-view-test')}
-          style={{ margin: 20, marginBottom: 0, backgroundColor: '#F0FDF4', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#BBF7D0' }}
-        >
-          <Ionicons name="person-circle-outline" size={22} color="#16a34a" />
-          <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#15803d' }}>
-            Test: Patient Listening View
-          </Text>
-          <Ionicons name="chevron-forward" size={18} color="#16a34a" />
-        </TouchableOpacity>
 
         {/* Explainer card */}
         <View style={{ margin: 20, backgroundColor: Colors.purple + '15', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: Colors.purple + '30' }}>
