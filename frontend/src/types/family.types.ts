@@ -77,29 +77,6 @@ export interface EngagementAlert {
   followUpOutcome: 'positive' | 'neutral' | 'difficult' | null;
 }
 
-// ── Care Updates ─────────────────────────────────────────────────────────────
-export type UpdateSeverity = 'info' | 'warning' | 'positive';
-
-export interface CareUpdate {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  severity: UpdateSeverity;
-  caregiverName: string;
-  time: string;
-}
-
-// ── Messages ─────────────────────────────────────────────────────────────────
-export interface FamilyMessage {
-  id: string;
-  senderId: string;         // 'family' | 'caregiver'
-  senderName: string;
-  text: string;
-  timestamp: string;
-  isRead: boolean;
-}
-
 // ── Quick Actions ─────────────────────────────────────────────────────────────
 export interface QuickAction {
   id: string;

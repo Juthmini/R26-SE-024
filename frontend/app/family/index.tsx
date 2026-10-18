@@ -9,13 +9,9 @@ import { SmartAlertCard }     from '../../src/components/family/dashboard/SmartA
 import { FollowUpPrompt }     from '../../src/components/family/dashboard/FollowUpPrompt';
 import { LatestStoryCard }    from '../../src/components/family/dashboard/LatestStoryCard';
 import { QuickActions }       from '../../src/components/family/dashboard/QuickActions';
-import { RecentActivity }     from '../../src/components/family/dashboard/RecentActivity';
 
 import { getStoredUser } from '../../src/api/authApi';
-import {
-  getLinkedPatient,
-  getRecentUpdates,
-} from '../../src/services/family/familyService';
+import { getLinkedPatient } from '../../src/services/family/familyService';
 import {
   acknowledgeAlert,
   getEngagementAlerts,
@@ -39,7 +35,6 @@ export default function FamilyDashboard() {
   const [pendingFollowUp, setPendingFollowUp] = useState<EngagementAlert | null>(null);
   const [reports, setReports] = useState<MemorySessionReport[]>([]);
 
-  const updates = getRecentUpdates();
   const latestReport = reports[0] || null;
 
   const stats: FamilyDashboardStats = {
@@ -190,15 +185,7 @@ export default function FamilyDashboard() {
         {/* ── Quick Actions ──────────────────────────────────────────────────── */}
         <QuickActions
           onStoriesPress={() => router.push('/family/stories')}
-          onMessagesPress={() => router.push('/family/messages')}
-          onUpdatesPress={() => router.push('/family/updates')}
           onCalendarPress={() => router.push('/family/calendar')}
-        />
-
-        {/* ── Recent Activity ────────────────────────────────────────────────── */}
-        <RecentActivity
-          updates={updates}
-          onViewAll={() => router.push('/family/updates')}
         />
       </ScrollView>
     </View>
