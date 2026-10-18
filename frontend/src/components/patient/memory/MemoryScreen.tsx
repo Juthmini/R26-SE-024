@@ -2,11 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import { authFetch } from '../../../api/authApi';
 import { speakStory, stopSpeaking } from '../../../services/family/ttsService';
 import EmotionTracker from '../../family/EmotionTracker';
-
-const API_URL = `${process.env.EXPO_PUBLIC_API_URL}/api`;
+import MomentCardUI from './MomentCardUI';
 
 interface Memory {
   _id: string;
@@ -37,8 +36,8 @@ export default function MemoryScreen() {
       }
       setPatientId(id);
 
-      const res = await axios.get(`${API_URL}/family/memories/patient/${id}`, { timeout: 10000 });
-      if (res.data.success) setMemories(res.data.memories || []);
+      const data = await authFetch('/patient/memories');
+      if (data.success) setMemories(data.memories || []);
     } catch {
       setError('Could not load memories. Check your connection.');
     } finally {
@@ -54,7 +53,7 @@ export default function MemoryScreen() {
     setThankYouFor(null);
     setPlayingId(memory._id);
 
-    axios.patch(`${API_URL}/family/memories/${memory._id}/play`).catch(() => {});
+    authFetch(`/patient/memories/${memory._id}/play`, { method: 'PATCH' }).catch(() => {});
 
     speakStory(memory.generatedStory, () => {
       setPlayingId(null);
@@ -77,6 +76,8 @@ export default function MemoryScreen() {
         <Text className="text-4xl font-bold text-gray-900">Memory</Text>
         <Text className="text-lg text-gray-600 mt-2">Tap Listen to hear a story about a special moment</Text>
       </View>
+
+      <MomentCardUI />
 
       {loading ? (
         <View className="items-center py-16">

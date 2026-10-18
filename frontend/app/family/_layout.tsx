@@ -132,16 +132,6 @@ export default function FamilyLayout() {
       />
 
       <Tabs.Screen
-        name="messages"
-        options={{
-          title: 'Messages',
-          tabBarIcon: ({ color, size, focused }) => (
-            <TabBarIcon name={focused ? 'chatbubble' : 'chatbubble-outline'} color={color} size={size} badge={1} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
         name="more"
         options={{
           title: 'More',
@@ -152,7 +142,13 @@ export default function FamilyLayout() {
       />
 
       {/* Hidden from tab bar */}
-      <Tabs.Screen name="updates" options={{ href: null }} />
+      <Tabs.Screen name="alerts" options={{ href: null }} />
+      <Tabs.Screen name="calendar" options={{ href: null }} />
+      {/* nested dynamic route — Expo Router registers it under its full
+          path relative to this Tabs navigator, not just the folder name,
+          so "event" alone doesn't match and the tab bar falls back to
+          showing it with a default icon */}
+      <Tabs.Screen name="event/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

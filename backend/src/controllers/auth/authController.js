@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const User = require('../../models/auth/User');
+const Patient = require('../../models/caregiver/Patient');
 const {
   generateAccessToken,
   generateRefreshToken,
@@ -78,6 +79,9 @@ const register = async (req, res) => {
       festivalsCelebrated, foodsPreferred,
       preferredSports, preferredSportsText,
       languagesPreferred, assignedCaregiverId,
+
+      // Family registration
+      patientEmail,
     } = req.body;
 
     // Validate role
@@ -96,6 +100,40 @@ const register = async (req, res) => {
         success: false,
         message: 'Email already registered.',
       });
+    }
+
+    // Family registration: resolve the patient's email to their care record
+    // *before* creating the account, so a bad email never leaves a dangling
+    // family user with nothing to link to.
+    let linkedPatientId = null;
+    if (role === 'family') {
+      if (!patientEmail) {
+        return res.status(400).json({
+          success: false,
+          message: 'Patient email is required.',
+        });
+      }
+
+      const patientUser = await User.findOne({
+        email: patientEmail.trim().toLowerCase(),
+        role: 'patient',
+      });
+      if (!patientUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'No patient account found with that email.',
+        });
+      }
+
+      const careRecord = await Patient.findOne({ registeredPatientId: patientUser._id });
+      if (!careRecord) {
+        return res.status(400).json({
+          success: false,
+          message: "This patient hasn't been added by a caregiver yet.",
+        });
+      }
+
+      linkedPatientId = careRecord._id;
     }
 
     const emptyPatientFields = {
@@ -140,6 +178,7 @@ const register = async (req, res) => {
       preferredSportsText,
       languagesPreferred: patientFields.languagesPreferred,
       assignedCaregiverId: role === 'patient' ? assignedCaregiverId || null : null,
+      linkedPatientId,
     });
 
     // Generate tokens
